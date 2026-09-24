@@ -160,3 +160,24 @@ func TestVariationPct(t *testing.T) {
 	near(t, "decrease", VariationPct(90, 100), -10, 1e-9)
 	near(t, "zero base", VariationPct(5, 0), 0, 1e-9)
 }
+
+func TestBuildAppliesTheSigmaFloorPerVariable(t *testing.T) {
+	readings := series(day0, 7, func(_, _ int) float64 { return 20 })
+	m, err := Build("M-TEST", readings, nil, DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	near(t, "voltage sigma", m.Profiles[domain.Voltage][0].Sigma, 0.005*220, 1e-9)
+	near(t, "current sigma", m.Profiles[domain.Current][0].Sigma, 0.05*100, 1e-9)
+	near(t, "power factor sigma", m.Profiles[domain.PowerFactor][0].Sigma, 0.02*0.9, 1e-9)
+}
+
+func TestMeterZUsesTheReadingsHour(t *testing.T) {
+	readings := series(day0, 7, func(_, h int) float64 { return float64(100 + h) })
+	m, err := Build("M-TEST", readings, nil, DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := domain.Reading{Timestamp: day0.AddDate(0, 0, 8).Add(3 * time.Hour), ConsumptionKWh: 103 + 2*0.05*103}
+	near(t, "z", m.Z(r, domain.Consumption), 2, 1e-9)
+}
