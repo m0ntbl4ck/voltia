@@ -20,8 +20,10 @@ type Config struct {
 	Seed       uint64
 }
 
+// DefaultConfig grows 500 trees: with 100, the hours the forest finds unusual
+// in M-104 swung between 49 and 96 of 96 from one seed to the next.
 func DefaultConfig() Config {
-	return Config{Trees: 100, SampleSize: 256, Seed: 7}
+	return Config{Trees: 500, SampleSize: 256, Seed: 7}
 }
 
 // node is either a split on one feature or, when feature is -1, a leaf.
