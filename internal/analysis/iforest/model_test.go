@@ -228,9 +228,42 @@ func TestCorroborateOnlyLooksInsideTheEpisode(t *testing.T) {
 	if !ok || sig.Hours != 2 || !sig.Start.Equal(hourAt(8, 12)) || !sig.End.Equal(hourAt(8, 13)) {
 		t.Errorf("got %+v (found %v), want the two hours 12:00 and 13:00", sig, ok)
 	}
-	sig, ok = model.Corroborate(episodeOn(15, 20, false), analysis)
+	sig, ok = model.Corroborate(episodeOn(15, 16, false), analysis)
 	if !ok || sig.Hours != 1 || !sig.Start.Equal(hourAt(8, 15)) {
 		t.Errorf("got %+v (found %v), want only the 15:00 hour", sig, ok)
+	}
+}
+
+// Most of the episode has to look unusual: one of two hours is the boundary
+// and counts, one of three or six in 24 does not, unless the share is lowered.
+func TestCorroborateNeedsMostOfTheEpisodeToBeUnusual(t *testing.T) {
+	model, analysis := trained(t)
+	cases := []struct {
+		name string
+		ep   classify.Episode
+		want bool
+	}{
+		{"all of it", episodeOn(11, 13, false), true},
+		{"exactly half", episodeOn(15, 16, false), true},
+		{"a third", episodeOn(15, 17, false), false},
+		{"a quarter of the day", episodeOn(0, 23, false), false},
+	}
+	for _, c := range cases {
+		if _, ok := model.Corroborate(c.ep, analysis); ok != c.want {
+			t.Errorf("%s: corroborated = %v, want %v", c.name, ok, c.want)
+		}
+	}
+
+	model.cfg.MinShare = 0.25
+	if _, ok := model.Corroborate(episodeOn(0, 23, false), analysis); !ok {
+		t.Error("with a share of 0.25 a quarter of the day should corroborate")
+	}
+	model.cfg.MinShare = 0
+	if _, ok := model.Corroborate(episodeOn(15, 17, false), analysis); !ok {
+		t.Error("with no minimum share one unusual hour should corroborate")
+	}
+	if _, ok := model.Corroborate(episodeOn(0, 9, false), analysis); ok {
+		t.Error("with no minimum share an episode with no unusual hour should still not corroborate")
 	}
 }
 
