@@ -76,11 +76,12 @@ func (m Meter) DailyKWh() float64 {
 	return total
 }
 
-// Build learns the baseline of one meter from its readings. Readings for which
-// skip returns true (known events, invalid data) do not contribute.
-func Build(meterID string, readings []domain.Reading, skip func(domain.Reading) bool, cfg Config) (Meter, error) {
+// ReferenceWindow returns the half-open interval [start, end) that defines
+// normal: `days` whole days counted from midnight of the earliest reading. It
+// returns zero times when there are no readings.
+func ReferenceWindow(readings []domain.Reading, days int) (start, end time.Time) {
 	if len(readings) == 0 {
-		return Meter{}, errors.New("no readings")
+		return time.Time{}, time.Time{}
 	}
 	first := readings[0].Timestamp
 	for _, r := range readings {
@@ -88,8 +89,17 @@ func Build(meterID string, readings []domain.Reading, skip func(domain.Reading) 
 			first = r.Timestamp
 		}
 	}
-	start := time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, first.Location())
-	end := start.AddDate(0, 0, cfg.ReferenceDays)
+	start = time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, first.Location())
+	return start, start.AddDate(0, 0, days)
+}
+
+// Build learns the baseline of one meter from its readings. Readings for which
+// skip returns true (known events, invalid data) do not contribute.
+func Build(meterID string, readings []domain.Reading, skip func(domain.Reading) bool, cfg Config) (Meter, error) {
+	if len(readings) == 0 {
+		return Meter{}, errors.New("no readings")
+	}
+	start, end := ReferenceWindow(readings, cfg.ReferenceDays)
 
 	samples := make(map[domain.Variable]*[24][]float64, len(domain.Variables))
 	for _, v := range domain.Variables {
