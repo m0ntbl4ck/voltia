@@ -323,3 +323,19 @@ func TestAttributeFindsTheFeaturesThatIsolate(t *testing.T) {
 		}
 	}
 }
+
+func TestCutStaysInsideTheRange(t *testing.T) {
+	near(t, "middle", cut(2, 4, 0.5), 3)
+	near(t, "start", cut(2, 4, 0), 2)
+
+	// Here lo + (hi-lo)*u rounds up to hi itself.
+	lo := 1.0
+	hi := math.Nextafter(lo, 2)
+	u := math.Nextafter(1, 0)
+	if lo+(hi-lo)*u != hi {
+		t.Fatal("the case no longer rounds up to hi, pick another")
+	}
+	if got := cut(lo, hi, u); got < lo || got >= hi {
+		t.Errorf("cut = %v, want in [%v, %v)", got, lo, hi)
+	}
+}

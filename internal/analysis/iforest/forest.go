@@ -99,7 +99,7 @@ func grow(rng *rand.Rand, rows [][]float64, depth, limit int) *node {
 	}
 	n.feature = spread[rng.IntN(len(spread))]
 	lo, hi := bounds(rows, n.feature)
-	n.split = lo + rng.Float64()*(hi-lo)
+	n.split = cut(lo, hi, rng.Float64())
 
 	var left, right [][]float64
 	for _, r := range rows {
@@ -112,6 +112,15 @@ func grow(rng *rand.Rand, rows [][]float64, depth, limit int) *node {
 	n.left = grow(rng, left, depth+1, limit)
 	n.right = grow(rng, right, depth+1, limit)
 	return n
+}
+
+// cut places a split u of the way from lo to hi. Rounding can land it exactly
+// on hi, which would leave nothing on the right, so it stays just below.
+func cut(lo, hi, u float64) float64 {
+	if s := lo + (hi-lo)*u; s < hi {
+		return s
+	}
+	return math.Nextafter(hi, lo)
 }
 
 func bounds(rows [][]float64, feature int) (lo, hi float64) {
