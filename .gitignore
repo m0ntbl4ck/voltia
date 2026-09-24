@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+# Ground truth reserved for the evaluator
+expected_results*
+
+/bin/
+/voltia
+*.test
+*.out
+coverage.*
+
+.DS_Store
+.idea/
+.vscode/
+*.swp
