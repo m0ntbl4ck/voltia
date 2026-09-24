@@ -234,10 +234,12 @@ func TestCorroborateOnlyLooksInsideTheEpisode(t *testing.T) {
 	}
 }
 
-// Most of the episode has to look unusual: one of two hours is the boundary
-// and counts, one of three or six in 24 does not, unless the share is lowered.
-func TestCorroborateNeedsMostOfTheEpisodeToBeUnusual(t *testing.T) {
+// A minimum share of the episode has to look unusual. At half, one of two
+// hours is the boundary and counts, one of three or six in 24 does not; the
+// share can be lowered to let those through.
+func TestCorroborateNeedsAMinimumShareOfTheEpisodeToBeUnusual(t *testing.T) {
 	model, analysis := trained(t)
+	model.cfg.MinShare = 0.5
 	cases := []struct {
 		name string
 		ep   classify.Episode

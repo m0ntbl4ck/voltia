@@ -29,12 +29,14 @@ type ModelConfig struct {
 	// bit more, so one unusual hour proves nothing.
 	Threshold float64
 	// MinShare is the fraction of an episode's readings that must be unusual
-	// for the forest to back the episode up.
+	// for the forest to back the episode up. Ordinary hours pass the threshold
+	// about 5% of the time in the healthy meters of the dataset, so 0.3 keeps
+	// noise out with room to spare on a thin episode.
 	MinShare float64
 }
 
 func DefaultModelConfig() ModelConfig {
-	return ModelConfig{Forest: DefaultConfig(), Threshold: 0.6, MinShare: 0.5}
+	return ModelConfig{Forest: DefaultConfig(), Threshold: 0.6, MinShare: 0.3}
 }
 
 // Model is a forest that learned how one meter looks when nothing is wrong.
