@@ -65,6 +65,12 @@ type Config struct {
 	// PatternMinCorrelation is the correlation between a day's consumption and
 	// the baseline profile below which the shape of the day is off.
 	PatternMinCorrelation float64
+	// PatternMinShape is how many times the spread of the baseline profile
+	// (its standard deviation across the 24 hours) must exceed the typical
+	// sigma before the correlation means anything. A flat profile with noise has
+	// no shape and correlates with nothing: it measures 0.3 to 0.4 in the
+	// meters of the dataset that would be flat, and 3.0 to 3.5 in the real ones.
+	PatternMinShape float64
 	// NightStartHour and NightEndHour bound the night: an hour is at night from
 	// NightStartHour on and before NightEndHour, wrapping midnight when the
 	// start is later than the end.
@@ -88,6 +94,7 @@ func DefaultConfig() Config {
 		JumpMaxConsumptionZ: 3,
 
 		PatternMinCorrelation: 0.8,
+		PatternMinShape:       1.5,
 		NightStartHour:        22,
 		NightEndHour:          6,
 		NightDayTolerance:     0.2,

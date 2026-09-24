@@ -149,21 +149,81 @@ func TestPatternCoversOnlyTheHoursThatLeftTheBaseline(t *testing.T) {
 }
 
 // When no hour is far from the baseline on its own, the whole day is reported.
-// A sigma of 1000 keeps every z near zero while the day is upside down.
+// With a sigma of 25 the schedule moved by six hours stays under 2.3 sigma at
+// every hour, while the correlation with the profile is 0. The shape is 1.13
+// times the noise, so the minimum shape is lowered to 1 for this meter.
 func TestPatternCoversTheWholeDayWhenNoSingleHourStandsOut(t *testing.T) {
 	var p baseline.Profile
 	for h := range p {
-		p[h] = baseline.HourStat{Median: profile(h), Sigma: 1000, Samples: 7}
+		p[h] = baseline.HourStat{Median: profile(h), Sigma: 25, Samples: 7}
 	}
 	m := baseline.Meter{MeterID: "M-TEST", Profiles: map[domain.Variable]baseline.Profile{domain.Consumption: p}}
-	r := days(1, func(d, h int) float64 { return 200 - profile(h) })
-	got := DetectHourlyPattern(m, r, DefaultConfig())
+	cfg := DefaultConfig()
+	cfg.PatternMinShape = 1
+	r := days(1, func(d, h int) float64 { return profile(h - 6) })
+	got := DetectHourlyPattern(m, r, cfg)
 	expect(t, got, 1)
 	if got[0].Hours != 24 || !got[0].Start.Equal(at(0)) || !got[0].End.Equal(at(23)) {
 		t.Errorf("hours=%d start=%v end=%v, want the whole day", got[0].Hours, got[0].Start, got[0].End)
 	}
+	near(t, "correlation", got[0].Metrics["correlation"], 0, 1e-9)
+}
+
+// A baseline whose hours differ by a point either way with a sigma of 5 has no
+// shape to speak of: a day that reverses that wobble correlates at -1 and must
+// still not be flagged. Only the minimum shape stands in the way.
+func TestPatternIgnoresTheCorrelationWhenTheProfileHasNoShape(t *testing.T) {
+	var p baseline.Profile
+	wobble := func(h int) float64 { return 100 + float64(h%2*2-1) }
+	for h := range p {
+		p[h] = baseline.HourStat{Median: wobble(h), Sigma: 5, Samples: 7}
+	}
+	m := baseline.Meter{MeterID: "M-TEST", Profiles: map[domain.Variable]baseline.Profile{domain.Consumption: p}}
+	r := days(1, func(d, h int) float64 { return 200 - wobble(h) })
+
+	expect(t, DetectHourlyPattern(m, r, DefaultConfig()), 0)
+
+	cfg := DefaultConfig()
+	cfg.PatternMinShape = 0.1
+	got := DetectHourlyPattern(m, r, cfg)
+	expect(t, got, 1)
 	near(t, "correlation", got[0].Metrics["correlation"], -1, 1e-9)
 }
+
+// The minimum shape is inclusive: a profile exactly at it still correlates.
+func TestPatternMinimumShapeIsInclusive(t *testing.T) {
+	m := shapedMeter(t)
+	r := days(1, func(d, h int) float64 { return profile(h - 6) })
+	cfg := DefaultConfig()
+	cfg.NightDayTolerance = 10 // silence the ratio
+	cfg.PatternMinShape = shapeStrength(m.Profiles[domain.Consumption])
+	expect(t, DetectHourlyPattern(m, r, cfg), 1)
+	cfg.PatternMinShape = math.Nextafter(cfg.PatternMinShape, math.Inf(1))
+	expect(t, DetectHourlyPattern(m, r, cfg), 0)
+}
+
+func TestShapeStrength(t *testing.T) {
+	profileOf := func(median func(h int) float64, sigma float64) baseline.Profile {
+		var p baseline.Profile
+		for h := range p {
+			p[h] = baseline.HourStat{Median: median(h), Sigma: sigma}
+		}
+		return p
+	}
+	// Medians of 90 and 110 alternate: a standard deviation of 10 over a sigma of 5.
+	near(t, "two levels", shapeStrength(profileOf(func(h int) float64 { return 100 + float64(h%2*20-10) }, 5)), 2, 1e-12)
+	// The daily sine has a standard deviation of 40/sqrt(2) over a sigma of 5.
+	near(t, "daily sine", shapeStrength(profileOf(profile2, 5)), 40/math.Sqrt2/5, 1e-9)
+	near(t, "flat", shapeStrength(profileOf(func(h int) float64 { return 100 }, 5)), 0, 0)
+	if got := shapeStrength(profileOf(profile2, 0)); !math.IsInf(got, 1) {
+		t.Errorf("shape without noise = %v, want +Inf", got)
+	}
+	near(t, "flat without noise", shapeStrength(profileOf(func(h int) float64 { return 100 }, 0)), 0, 0)
+	// 24 times 0.1 does not sum back to 2.4, and that residue must not read as a shape.
+	near(t, "flat with rounding residue", shapeStrength(profileOf(func(h int) float64 { return 0.1 }, 0)), 0, 0)
+}
+
+func profile2(h int) float64 { return profile(h) }
 
 func TestPatternFlagsOnlyTheDayThatChanged(t *testing.T) {
 	r := days(3, func(d, h int) float64 {

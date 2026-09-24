@@ -16,8 +16,10 @@ const (
 // DetectHourlyPattern compares the shape of each complete day with the
 // baseline profile. A day is off when its consumption correlates with the
 // profile below PatternMinCorrelation, or when its night to day ratio strays
-// from the baseline's by more than NightDayTolerance. A level that moves with
-// the same shape leaves both untouched, and is left to the shift detector.
+// from the baseline's by more than NightDayTolerance. The correlation only
+// counts when the profile has a shape of its own, above its noise. A level
+// that moves with the same shape leaves both untouched, and is left to the
+// shift detector.
 // The signal covers the hours of the day that left the baseline, or the whole
 // day when no single hour did.
 func DetectHourlyPattern(m baseline.Meter, readings []domain.Reading, cfg Config) []Signal {
@@ -28,6 +30,7 @@ func DetectHourlyPattern(m baseline.Meter, readings []domain.Reading, cfg Config
 		profile[h] = stat.Median
 	}
 	baseRatio, baseRatioOK := nightDayRatio(profile, cfg)
+	shaped := shapeStrength(m.Profiles[domain.Consumption]) >= cfg.PatternMinShape
 
 	var out []Signal
 	for from := 0; from < len(s.readings); {
@@ -47,6 +50,7 @@ func DetectHourlyPattern(m baseline.Meter, readings []domain.Reading, cfg Config
 		}
 		metrics := map[string]float64{}
 		corr, corrOK := pearson(day[:], profile[:])
+		corrOK = corrOK && shaped
 		off := corrOK && corr < cfg.PatternMinCorrelation
 		if corrOK {
 			metrics["correlation"] = corr
@@ -117,6 +121,30 @@ func (c Config) isNight(h int) bool {
 		return h >= c.NightStartHour && h < c.NightEndHour
 	}
 	return h >= c.NightStartHour || h < c.NightEndHour
+}
+
+// shapeStrength is the spread of the hourly medians over the typical sigma:
+// how far the profile's shape stands above its noise. It is 0 for a flat
+// profile and infinite for a shaped one without any noise.
+func shapeStrength(p baseline.Profile) float64 {
+	var mean, sigma float64
+	for _, h := range p {
+		mean += h.Median
+		sigma += h.Sigma
+	}
+	mean, sigma = mean/24, sigma/24
+	var variance float64
+	for _, h := range p {
+		variance += (h.Median - mean) * (h.Median - mean)
+	}
+	spread := math.Sqrt(variance / 24)
+	switch {
+	case spread <= 1e-12*math.Abs(mean):
+		return 0 // rounding noise around a flat profile
+	case sigma == 0:
+		return math.Inf(1)
+	}
+	return spread / sigma
 }
 
 // nightDayRatio is the mean consumption of the night hours over that of the
