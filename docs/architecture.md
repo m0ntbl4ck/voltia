@@ -416,3 +416,137 @@ Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807**
 
 ---
 
+## 11. Testing y calidad
+
+| Nivel | Qué | Herramienta |
+|---|---|---|
+| 1 (clave) | **Regresión sobre el dataset real**: los 4 casos + 8 sanos + inicio de episodio de M-109 | `go test` |
+| 2 | Unitarios del motor: baseline, D1 a D7, clasificador y reglas de seguridad, scoring, determinismo IF, guarda de números | `go test` table-driven |
+| 3 | API: códigos, filtros, auth, RFC 7807 | `httptest` + repos fake |
+| 3+ | 3 a 4 tests críticos contra Postgres real: filtros/orden, seed idempotente, dedupe por fingerprint | Testcontainers |
+| 4 | Utilidades y componentes clave del frontend | Vitest |
+| stretch | 1 smoke e2e del flujo de la demo, solo local | Playwright |
+
+CI (GitHub Actions): lint Go/TS → tests Go → build web → build imagen Docker. `Makefile`: `make up`, `make dev`, `make test`, `make lint`.
+
+### 11.1 Skills obligatorias
+
+Tres skills se aplican al pie de la letra durante todo el proyecto. Ninguna se adapta, se resume ni se reemplaza por un paso manual. Si una instrucción del proyecto choca con una skill, se detiene el trabajo y se consulta al dueño del proyecto antes de seguir.
+
+| Skill | Ámbito | Sección |
+|---|---|---|
+| antislop, con todas sus skills | Planificación, código, UI, textos y entrega | §11.2 |
+| `git-commit-master` | Cada commit, sin excepción | §11.3 |
+| `git-ramas` | Cada rama: feature, bugfix y hotfix | §11.4 |
+
+### 11.2 antislop: todas sus skills, en todas las fases
+
+Se usan las seis skills del plugin antislop en todas las fases del proyecto, no solo en la de UI:
+
+| Skill | Qué controla |
+|---|---|
+| `antislop` (núcleo) | Filtro base, reglas R-01 a R-38 y el Delivery Gate. Se carga al empezar cada sesión de trabajo |
+| `antislop-ui` | Color, layout, componentes, decoración y animación |
+| `antislop-human` | Contraste (con su verificador), teclado, foco y estados vacío, carga y error |
+| `antislop-copywriting` | Todo texto para personas: UI, README, ADRs, este documento, guion de la demo, prompt de Gemini y plantillas de explicación |
+| `antislop-code` | Comentarios del código Go y TypeScript |
+| `antislop-layoutmobile` | Adaptación de escritorio a tablet y móvil |
+
+Reglas de aplicación:
+
+- **Modo:** antislop se aplica durante el trabajo (modo 1): las reglas rigen mientras se escribe, no después.
+- **Cierre:** cada entrega pasa el Delivery Gate completo (bloques 1 a 4) con el reporte PASS/FAIL y su evidencia. Un FAIL bloquea la entrega.
+- **Dirección de diseño (R-37):** la UI no se empieza sin un `DESIGN.md` escrito por el dueño del proyecto, con identidad, paleta, tipografía y los diales ENERGY, RHYTHM y MOTION.
+- **Activos (R-23):** logo, iconografía e imágenes se confirman con el dueño antes de crearse. Hasta entonces se usan placeholders marcados como tales.
+- **Textos:** ningún texto lleva guion largo (R-02), cifras sin fuente (R-17) ni vocabulario vacío de IA (R-16).
+
+Criterios de aceptación:
+
+- Todos los pares de color texto/fondo de ambos temas pasan el verificador de contraste (WCAG AA como mínimo).
+- El flujo de la demo se recorre entero con teclado y el foco siempre se ve.
+- Las explicaciones de la IA y las plantillas se leen como escritas por un ingeniero de mantenimiento: concretas, con cifras de la evidencia y sin muletillas de IA.
+- Ningún commit agrega comentarios que solo repitan lo que hace el código.
+
+### 11.3 Commits: `git-commit-master`
+
+Todo commit se crea con la skill `git-commit-master`. Nadie escribe mensajes de commit a mano.
+
+| Regla | Detalle |
+|---|---|
+| Formato | Conventional Commits: `tipo(alcance): descripción`, en inglés y en imperativo |
+| Tipos | Los de la skill: `feat`, `fix`, `refactor`, `docs`, `style`, `perf`, `chore`, `test` |
+| Título | Máximo 50 caracteres, sin punto final |
+| Cuerpo | Explica la intención y el impacto del cambio |
+| Autoría | **Sin coautor:** ningún commit lleva `Co-Authored-By` ni otro pie de autoría |
+| Seguridad | La skill cancela el commit si detecta secretos. Nunca se versionan `.env` ni `expected_results.csv` |
+| Tamaño | Si el diff pasa de 500 líneas, se divide en commits más atómicos |
+
+### 11.4 Ramas: `git-ramas`
+
+Todas las ramas siguen los flujos de la skill `git-ramas`, paso por paso y sin saltarse ninguno.
+
+- **Feature y bugfix:** la rama de trabajo sale de la release vigente (la `release/v*` de mayor versión). Al terminar se sube la rama, se crea la rama temporal `-dev`, se trae `dev` sobre ella y se sube solo esa rama temporal.
+- **Hotfix:** la rama sale de `main` y genera dos ramas temporales, `-dev` y `-release`, una por cada destino.
+- **Nomenclatura:** `feature/`, `bugfix/` o `hotfix/` más una descripción de 3 o 4 palabras.
+- **Pull Requests:** los abre el dueño del proyecto desde GitHub. Nunca se crean por comandos.
+- **Ramas protegidas:** nunca se hace push directo a `main`, `dev` ni a una `release/v*`.
+- **Push:** se confirma con el dueño antes de cada `git push`.
+- **Conflictos:** si aparecen al integrar con `dev` o con la release, el proceso se detiene hasta que el dueño los revise.
+
+Repositorio: `github.com/m0ntbl4ck/voltia`.
+
+---
+
+## 12. Plan de ejecución
+
+| Día | Meta | Entregable verificable |
+|---|---|---|
+| **Jue 24** | El cerebro funciona | Scaffold, migraciones, seed, motor completo; **test de regresión en verde** |
+| **Vie 25** | La API y la IA hablan | API completa + OpenAPI; Explainer (plantillas → Gemini) + guarda + caché; Isolation Forest |
+| **Sáb 26** | Voltia se ve como producto | Las 7 pantallas y el flujo de la demo completo con `docker compose up` |
+| **Dom 27** | Entrega | Pulido, tests restantes, adaptador Claude, README + ADRs, prueba en limpio sin key, **grabación de la demo** |
+
+Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria cierra con el Delivery Gate de antislop.
+
+**Orden de recorte si hay atraso:** Playwright → adaptador Claude → modo claro → Isolation Forest → D4.
+**Nunca se recortan:** test de regresión, flujo de la demo, fallback a plantillas, README.
+
+---
+
+## 13. Guion de demo (grabada, 5 a 10 min)
+
+1. **Login** como demo → dashboard vacío: "aún no hay análisis".
+2. **Contexto:** 12 medidores, 14 días; M-109 aparece con consumo alto en la tabla.
+3. **Detalle M-109:** la línea se sale de la banda de baseline el 12-sep 14:00; FP cae.
+4. **▶ Run AI Analysis:** stepper de 7 etapas → *"4 anomalías detectadas · 2 requieren atención prioritaria"*.
+5. **Anomalías IA:** M-109 (Real/High) primero; M-112 (Calidad/High); M-104 (Explicable/Medium); M-106 (Falso positivo/Low, no escalar).
+6. **Investigación M-109:** narrativa de Gemini, evidencia, desglose de confianza (0,96), evento UNKNOWN tratado como "sin explicación".
+7. **M-112 y M-106** en 30 s cada uno: por qué *no* son anomalías reales.
+8. **Acción:** "Crear orden de inspección" → el dashboard baja de 2 a 1 alta prioridad pendiente.
+9. **Cierre técnico:** arquitectura, `go test` de regresión en verde, Swagger.
+
+---
+
+## 14. Limitaciones conocidas y trabajo futuro
+
+- La confianza es un índice de solidez de evidencia, **no una probabilidad calibrada** (sin datos etiquetados).
+- Baseline con solo 7 días de referencia: no separa días laborales de fines de semana.
+- Umbrales ajustados a un dataset pequeño; en producción se calibrarían con historial y feedback de operadores (las acciones DISMISS/RESOLVE son la semilla de ese feedback).
+- Análisis en proceso (goroutine); a escala se movería a una cola/worker.
+- Futuro: deploy en nube, SSE para progreso, multi-tenant y roles, notificaciones, ingesta en streaming.
+
+---
+
+## 15. Registro de decisiones (→ `docs/adr/`)
+
+| ADR | Decisión |
+|---|---|
+| 0001 | Go, monolito modular con hexagonal ligera |
+| 0002 | PostgreSQL + sqlc + goose; estado del medidor derivado |
+| 0003 | Motor determinista decide, LLM narra, plantillas como fallback |
+| 0004 | Baseline horario robusto (mediana + MAD) con referencia excluyente |
+| 0005 | Detectores por reglas + Isolation Forest como corroborador |
+| 0006 | Clasificación por árbol con reglas de seguridad sobre eventos |
+| 0007 | Gemini 3.8 Flash como proveedor por defecto, Claude intercambiable |
+| 0008 | SPA React embebida en el binario; polling para el progreso |
+| 0009 | snake_case de punta a punta y RFC 7807 |
