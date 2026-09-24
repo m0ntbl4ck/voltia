@@ -71,8 +71,9 @@ func confidence(res classify.Result, cfg ConfidenceConfig) (float64, ConfidenceB
 	return math.Min(cfg.Ceiling, math.Max(cfg.Floor, sum/weights)), b
 }
 
-// agreement counts independent sources of evidence: each kind of signal, plus
-// one when a persistent shift shows up in more than one variable.
+// agreement counts independent sources of evidence: each kind of signal, the
+// isolation forest included, plus one when a persistent shift shows up in more
+// than one variable.
 func agreement(ep classify.Episode) float64 {
 	kinds := map[detectors.Kind]bool{}
 	shifted := map[domain.Variable]bool{}
@@ -94,6 +95,9 @@ func strength(ep classify.Episode, cfg ConfidenceConfig) float64 {
 	var maxZ float64
 	hours := 0
 	for _, s := range ep.Signals {
+		if s.Kind == detectors.KindIsolationForest {
+			continue // its score is not a z and its hours lie inside the others'
+		}
 		maxZ = math.Max(maxZ, math.Abs(s.MeanZ))
 		if s.Kind == detectors.KindDataQuality {
 			hours += s.Hours

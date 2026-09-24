@@ -24,6 +24,38 @@ func TestAgreementCountsIndependentSources(t *testing.T) {
 	near(t, "three kinds", partsOf(three).DetectorAgreement, 1, 1e-9)
 }
 
+// The forest backs up the episode as one more independent source.
+func TestAgreementCountsTheIsolationForest(t *testing.T) {
+	alone := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil, consumption(20, 1, 60))
+	backed := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil, consumption(20, 1, 60), isolation(15, 0.9))
+	near(t, "alone", partsOf(alone).DetectorAgreement, 0.5, 1e-9)
+	near(t, "backed up", partsOf(backed).DetectorAgreement, 0.75, 1e-9)
+}
+
+// Its score is not a z-score and its hours lie inside the other signals', so
+// it must not raise the strength: the 12 hours below would otherwise turn
+// half persistence into full persistence.
+func TestStrengthIgnoresTheIsolationForest(t *testing.T) {
+	sig := shift(domain.Consumption, 6, 1, 200, 100, 4)
+	alone := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 12, true, nil, sig)
+	backed := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 12, true, nil, sig, isolation(12, 0.99))
+	near(t, "alone", partsOf(alone).SignalStrength, 0.5, 1e-9)
+	near(t, "backed up", partsOf(backed).SignalStrength, partsOf(alone).SignalStrength, 1e-9)
+}
+
+// Corroboration feeds the confidence only: type, severity and priority stay.
+func TestIsolationForestDoesNotChangeSeverityOrPriority(t *testing.T) {
+	plain := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil, consumption(20, 1, 60))
+	backed := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil, consumption(20, 1, 60), isolation(20, 0.95))
+	a, b := Evaluate(plain, DefaultConfig()), Evaluate(backed, DefaultConfig())
+	if a.Severity != b.Severity || a.Priority != b.Priority || a.VariationPct != b.VariationPct || a.ExcessKWh != b.ExcessKWh {
+		t.Errorf("without: %+v, with: %+v", a, b)
+	}
+	if b.Confidence <= a.Confidence {
+		t.Errorf("confidence %.4f with the forest, %.4f without: the forest should raise it", b.Confidence, a.Confidence)
+	}
+}
+
 func TestStrengthCombinesDeviationAndPersistence(t *testing.T) {
 	full := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 12, true, nil, shift(domain.Consumption, 12, 1, 200, 100, 8))
 	half := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 6, true, nil, shift(domain.Consumption, 6, 1, 200, 100, 4))

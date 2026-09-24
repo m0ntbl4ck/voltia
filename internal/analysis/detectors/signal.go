@@ -14,6 +14,8 @@ const (
 	KindOutlier            Kind = "OUTLIER"
 	KindElectricalRelation Kind = "ELECTRICAL_RELATION"
 	KindDataQuality        Kind = "DATA_QUALITY"
+	// KindIsolationForest only backs up an episode the other detectors found.
+	KindIsolationForest Kind = "ISOLATION_FOREST"
 )
 
 // Signal is one finding with the evidence behind it. Detectors never decide
@@ -33,6 +35,9 @@ type Signal struct {
 	Observed float64
 	Expected float64
 	MeanZ    float64
+	// Attribution is the share of the finding each variable explains, set only
+	// by the isolation forest, whose signal spans several variables at once.
+	Attribution map[domain.Variable]float64
 	// Open is true when the signal reaches the last reading, so it may still be going on.
 	Open bool
 }

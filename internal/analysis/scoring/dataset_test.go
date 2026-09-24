@@ -57,7 +57,8 @@ func scoreDataset(t *testing.T) map[string]scoring.Score {
 
 // Hand-computed from the episode evidence: M-109 rises 110.5% with 2825 kWh of
 // excess, M-104 rises 46.5% with 2178 kWh, M-112 has 16 invalid readings and
-// M-106 lost 80% of its consumption for 12 hours.
+// M-106 lost 80% of its consumption for 12 hours. The isolation forest backs
+// all four up, so the last three reach the 0.99 ceiling of the confidence.
 func TestDatasetScores(t *testing.T) {
 	got := scoreDataset(t)
 	if len(got) != 4 {
@@ -71,9 +72,9 @@ func TestDatasetScores(t *testing.T) {
 		band       scoring.Band
 	}{
 		{"M-109", domain.SeverityHigh, 100, 0.9875, scoring.BandHigh},
-		{"M-112", domain.SeverityHigh, 65, 0.9028, scoring.BandHigh},
-		{"M-104", domain.SeverityMedium, 53, 0.9125, scoring.BandHigh},
-		{"M-106", domain.SeverityLow, 5, 0.9125, scoring.BandHigh},
+		{"M-112", domain.SeverityHigh, 65, 0.99, scoring.BandHigh},
+		{"M-104", domain.SeverityMedium, 53, 0.99, scoring.BandHigh},
+		{"M-106", domain.SeverityLow, 5, 0.99, scoring.BandHigh},
 	}
 	for _, c := range cases {
 		t.Run(c.meter, func(t *testing.T) {
@@ -111,7 +112,8 @@ func TestDatasetAggregateConfidence(t *testing.T) {
 		scores = append(scores, s)
 	}
 	agg := scoring.AggregateConfidence(scores, scoring.DefaultConfidenceConfig())
-	if agg < 0.93 || agg > 0.94 {
-		t.Errorf("aggregate confidence = %.4f, want about 0.934", agg)
+	// Weights 3, 3, 2 and 1 by severity: (3*0.9875 + 3*0.99 + 2*0.99 + 0.99) / 9.
+	if agg < 0.9891 || agg > 0.9893 {
+		t.Errorf("aggregate confidence = %.4f, want about 0.9892", agg)
 	}
 }
