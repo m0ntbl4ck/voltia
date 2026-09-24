@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"regexp"
 	"strconv"
 	"time"
 	// The embedded tz database lets America/Bogota resolve on images without one.
@@ -11,6 +12,10 @@ import (
 
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
+
+// durationPattern finds the length an event states in its description, as in
+// "Scheduled maintenance outage for 12 hours".
+var durationPattern = regexp.MustCompile(`(?i)\bfor (\d+) hours?\b`)
 
 const (
 	readingLayout = "2006-01-02 15:04:05"
@@ -62,9 +67,22 @@ func ParseEvents(r io.Reader, loc *time.Location) ([]domain.Event, error) {
 			Timestamp:   ts,
 			Type:        domain.EventType(row[col["event_type"]]),
 			Description: row[col["description"]],
+			Duration:    parseDuration(row[col["description"]]),
 		})
 	}
 	return out, nil
+}
+
+func parseDuration(description string) time.Duration {
+	m := durationPattern.FindStringSubmatch(description)
+	if m == nil {
+		return 0
+	}
+	hours, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return time.Duration(hours) * time.Hour
 }
 
 // readTable returns the data rows and a column index by header name, failing
