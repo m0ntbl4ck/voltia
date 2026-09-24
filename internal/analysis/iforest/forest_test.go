@@ -1,0 +1,224 @@
+package iforest
+
+import (
+	"math"
+	"math/rand/v2"
+	"testing"
+)
+
+func near(t *testing.T, name string, got, want float64) {
+	t.Helper()
+	if math.Abs(got-want) > 1e-9 {
+		t.Errorf("%s = %.12f, want %.12f", name, got, want)
+	}
+}
+
+// Values from an independent computation of 2(ln(n-1)+γ) - 2(n-1)/n.
+func TestAveragePath(t *testing.T) {
+	near(t, "c(0)", averagePath(0), 0)
+	near(t, "c(1)", averagePath(1), 0)
+	near(t, "c(2)", averagePath(2), 1)
+	near(t, "c(3)", averagePath(3), 1.207392357589623)
+	near(t, "c(4)", averagePath(4), 1.8516559071392855)
+	near(t, "c(256)", averagePath(256), 10.244770920119917)
+}
+
+// One tree over four rows: it splits feature 0 at 5 and leaves one row on the
+// left and three on the right. A point on the left is isolated at depth 1, so
+// its path is 1 + c(1); on the right it is 1 + c(3). Both are scaled by c(4).
+func TestScoreOnAHandBuiltTree(t *testing.T) {
+	tree := &node{feature: 0, split: 5, size: 4,
+		left:  &node{feature: -1, size: 1},
+		right: &node{feature: -1, size: 3},
+	}
+	f := &Forest{trees: []*node{tree}, sample: 4, features: 2}
+	near(t, "left", f.Score([]float64{1, 0}), 0.6877436677788327)
+	near(t, "right", f.Score([]float64{9, 0}), 0.4376598631629993)
+	near(t, "on the split", f.Score([]float64{5, 0}), 0.6877436677788327)
+}
+
+// A second tree splits feature 1 at 2 into two leaves of two rows. The path
+// of (1, 9) is 1 in the first tree and 1 + c(2) = 2 in the second.
+func TestScoreAveragesTheTrees(t *testing.T) {
+	first := &node{feature: 0, split: 5, size: 4,
+		left:  &node{feature: -1, size: 1},
+		right: &node{feature: -1, size: 3},
+	}
+	second := &node{feature: 1, split: 2, size: 4,
+		left:  &node{feature: -1, size: 2},
+		right: &node{feature: -1, size: 2},
+	}
+	f := &Forest{trees: []*node{first, second}, sample: 4, features: 2}
+	near(t, "score", f.Score([]float64{1, 9}), 0.5703479706671019)
+}
+
+func TestFitRejectsBadInput(t *testing.T) {
+	ok := [][]float64{{1, 2}, {3, 4}}
+	cases := map[string]struct {
+		rows [][]float64
+		cfg  Config
+	}{
+		"no rows":         {nil, DefaultConfig()},
+		"no trees":        {ok, Config{Trees: 0, SampleSize: 4}},
+		"tiny sample":     {ok, Config{Trees: 1, SampleSize: 1}},
+		"no features":     {[][]float64{{}, {}}, DefaultConfig()},
+		"ragged rows":     {[][]float64{{1, 2}, {3}}, DefaultConfig()},
+		"empty first row": {[][]float64{{}, {1}}, DefaultConfig()},
+	}
+	for name, c := range cases {
+		if _, err := Fit(c.rows, c.cfg); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+// cloud draws n rows around the origin with the given number of features.
+func cloud(n, features int, seed uint64) [][]float64 {
+	rng := rand.New(rand.NewPCG(seed, 1))
+	rows := make([][]float64, n)
+	for i := range rows {
+		rows[i] = make([]float64, features)
+		for j := range rows[i] {
+			rows[i][j] = rng.NormFloat64()
+		}
+	}
+	return rows
+}
+
+func TestFitIsDeterministic(t *testing.T) {
+	rows := cloud(300, 3, 1)
+	a, err := Fit(rows, DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := Fit(rows, DefaultConfig())
+	other, _ := Fit(rows, Config{Trees: 100, SampleSize: 256, Seed: 8})
+
+	x := []float64{2.5, -1, 0.3}
+	if a.Score(x) != b.Score(x) {
+		t.Errorf("same seed gave %v and %v", a.Score(x), b.Score(x))
+	}
+	if a.Score(x) == other.Score(x) {
+		t.Error("a different seed should grow different trees")
+	}
+}
+
+func TestOutlierScoresAboveTheCloud(t *testing.T) {
+	rows := cloud(400, 3, 2)
+	f, err := Fit(rows, DefaultConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum float64
+	for _, r := range rows {
+		sum += f.Score(r)
+	}
+	if mean := sum / float64(len(rows)); mean > 0.5 {
+		t.Errorf("mean score of the cloud = %.3f, want at most 0.5", mean)
+	}
+	if far := f.Score([]float64{9, 9, 9}); far < 0.65 {
+		t.Errorf("score far outside the cloud = %.3f, want at least 0.65", far)
+	}
+	if centre := f.Score([]float64{0, 0, 0}); centre > 0.45 {
+		t.Errorf("score at the centre = %.3f, want at most 0.45", centre)
+	}
+}
+
+// The forest isolates points that are unusual as a whole. One feature far out
+// with the rest ordinary only lifts the score a little (numpy reference:
+// 0.50 against 0.38 at the centre), which is why single-variable outliers stay
+// with the z-score detectors.
+func TestOutlierInASingleFeatureOnlyLiftsTheScoreALittle(t *testing.T) {
+	f, err := Fit(cloud(400, 4, 3), Config{Trees: 500, SampleSize: 256, Seed: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	centre := f.Score([]float64{0, 0, 0, 0})
+	one := f.Score([]float64{0, 0, 12, 0})
+	all := f.Score([]float64{9, 9, 9, 9})
+	if !(centre+0.05 < one && one < all-0.1) {
+		t.Errorf("scores centre=%.3f one feature=%.3f all features=%.3f, want them to rise in that order", centre, one, all)
+	}
+}
+
+func TestIdenticalRowsScoreOneHalf(t *testing.T) {
+	rows := make([][]float64, 10)
+	for i := range rows {
+		rows[i] = []float64{3, 4}
+	}
+	f, err := Fit(rows, Config{Trees: 5, SampleSize: 256, Seed: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	near(t, "score", f.Score([]float64{3, 4}), 0.5)
+}
+
+func TestSampleIsCappedByTheRows(t *testing.T) {
+	f, err := Fit(cloud(50, 2, 4), Config{Trees: 3, SampleSize: 256, Seed: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.sample != 50 {
+		t.Errorf("sample = %d, want 50", f.sample)
+	}
+	g, _ := Fit(cloud(500, 2, 4), Config{Trees: 3, SampleSize: 64, Seed: 1})
+	if g.sample != 64 {
+		t.Errorf("sample = %d, want 64", g.sample)
+	}
+}
+
+// Every split must send at least one row each way, sizes must add up and no
+// tree may grow past ceil(log2(sample)).
+func TestTreesAreWellFormed(t *testing.T) {
+	f, err := Fit(cloud(300, 3, 5), Config{Trees: 20, SampleSize: 128, Seed: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	limit := 7 // ceil(log2(128))
+	var walk func(n *node, depth int)
+	walk = func(n *node, depth int) {
+		if depth > limit {
+			t.Fatalf("depth %d beyond the limit %d", depth, limit)
+		}
+		if n.feature < 0 {
+			return
+		}
+		if n.left.size < 1 || n.right.size < 1 {
+			t.Fatalf("split with an empty side: %d and %d rows", n.left.size, n.right.size)
+		}
+		if n.left.size+n.right.size != n.size {
+			t.Fatalf("children hold %d rows, node %d", n.left.size+n.right.size, n.size)
+		}
+		walk(n.left, depth+1)
+		walk(n.right, depth+1)
+	}
+	for _, tree := range f.trees {
+		if tree.size != 128 {
+			t.Fatalf("root holds %d rows, want 128", tree.size)
+		}
+		walk(tree, 0)
+	}
+}
+
+// The limit is ceil(log2(sample)): 100 rows give 7, and with that many random
+// splits at least one tree reaches it.
+func TestTreesGrowUpToTheHeightLimit(t *testing.T) {
+	f, err := Fit(cloud(300, 3, 6), Config{Trees: 30, SampleSize: 100, Seed: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var height func(n *node) int
+	height = func(n *node) int {
+		if n.feature < 0 {
+			return 0
+		}
+		return 1 + max(height(n.left), height(n.right))
+	}
+	deepest := 0
+	for _, tree := range f.trees {
+		deepest = max(deepest, height(tree))
+	}
+	if deepest != 7 {
+		t.Errorf("deepest tree has height %d, want 7", deepest)
+	}
+}
