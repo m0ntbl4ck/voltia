@@ -17,14 +17,24 @@ type Config struct {
 	// ReferenceDays is how many days from the first reading define "normal".
 	ReferenceDays int
 	// MinSigmaRatio keeps very stable hours from producing huge z-scores: sigma
-	// never drops below this fraction of the median.
-	MinSigmaRatio float64
+	// never drops below this fraction of the median. It is set per variable
+	// because voltage and power factor are far steadier than consumption.
+	MinSigmaRatio map[domain.Variable]float64
 	// RecentDays is how many complete trailing days measure the current level.
 	RecentDays int
 }
 
 func DefaultConfig() Config {
-	return Config{ReferenceDays: 7, MinSigmaRatio: 0.05, RecentDays: 2}
+	return Config{
+		ReferenceDays: 7,
+		MinSigmaRatio: map[domain.Variable]float64{
+			domain.Consumption: 0.05,
+			domain.Voltage:     0.005,
+			domain.Current:     0.05,
+			domain.PowerFactor: 0.02,
+		},
+		RecentDays: 2,
+	}
 }
 
 // HourStat summarizes one hour of the day across the reference window.
@@ -50,6 +60,11 @@ func (p Profile) Z(hour int, x float64) float64 {
 type Meter struct {
 	MeterID  string
 	Profiles map[domain.Variable]Profile
+}
+
+// Z is the z-score of one variable of a reading against its hourly profile.
+func (m Meter) Z(r domain.Reading, v domain.Variable) float64 {
+	return m.Profiles[v].Z(r.Timestamp.Hour(), r.Value(v))
 }
 
 // DailyKWh is the expected consumption of a full day: the sum of the hourly medians.
@@ -101,7 +116,7 @@ func Build(meterID string, readings []domain.Reading, skip func(domain.Reading) 
 				return Meter{}, fmt.Errorf("meter %s: no reference samples for %s at hour %d", meterID, v, h)
 			}
 			med := median(values)
-			sigma := math.Max(madToSigma*medianAbsDeviation(values, med), cfg.MinSigmaRatio*math.Abs(med))
+			sigma := math.Max(madToSigma*medianAbsDeviation(values, med), cfg.MinSigmaRatio[v]*math.Abs(med))
 			p[h] = HourStat{Median: med, Sigma: sigma, Samples: len(values)}
 		}
 		profiles[v] = p
