@@ -36,6 +36,14 @@ func invalid(readings int) detectors.Signal {
 	return detectors.Signal{Kind: detectors.KindDataQuality, Check: detectors.CheckElectricalJump, Variable: domain.Voltage, Start: t0, End: t0.Add(time.Duration(readings-1) * time.Hour), Hours: readings, MeanZ: 12}
 }
 
+// isolation builds the isolation forest signal that backs up an episode.
+func isolation(hours int, score float64) detectors.Signal {
+	return detectors.Signal{
+		Kind: detectors.KindIsolationForest, Variable: domain.Consumption, Start: t0, End: t0.Add(time.Duration(hours-1) * time.Hour),
+		Hours: hours, Observed: score, Expected: 0.6,
+	}
+}
+
 // result builds a classified episode of the given length.
 func result(typ domain.AnomalyType, rule classify.Rule, hours int, open bool, events []classify.EventLink, signals ...detectors.Signal) classify.Result {
 	return classify.Result{

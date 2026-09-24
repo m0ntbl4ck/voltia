@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sort"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/m0ntbl4ck/voltia/internal/analysis/baseline"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/iforest"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/scoring"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
@@ -19,6 +21,8 @@ import (
 type meterReadings struct {
 	id  string
 	all []domain.Reading
+	// reference holds the readings inside the reference window.
+	reference []domain.Reading
 	// analysis holds the readings at or after the end of the reference window.
 	analysis []domain.Reading
 }
@@ -34,21 +38,34 @@ func Run(ctx context.Context, in Input, cfg Config, progress func(Progress)) (Re
 
 	p.start(StageReadings)
 	meters := splitByMeter(in.Readings, cfg.Baseline.ReferenceDays)
+	analysisReadings := make(map[string][]domain.Reading, len(meters))
+	for _, m := range meters {
+		analysisReadings[m.id] = m.analysis
+	}
 	p.done(StageReadings)
 
 	var report Report
 	profiles := map[string]baseline.Meter{}
+	models := map[string]iforest.Model{}
 	p.start(StageBaseline)
 	for _, m := range meters {
 		if err := ctx.Err(); err != nil {
 			return Report{}, err
 		}
-		b, err := baseline.Build(m.id, m.all, referenceSkip(m.id, in.Events, cfg.EventExclusion), cfg.Baseline)
+		skip := referenceSkip(m.id, in.Events, cfg.EventExclusion)
+		b, err := baseline.Build(m.id, m.all, skip, cfg.Baseline)
 		if err != nil {
 			report.Failures = append(report.Failures, MeterFailure{MeterID: m.id, Err: err})
 			continue
 		}
+		// The baseline already has samples for every hour, so a forest that
+		// cannot be trained means the configuration is wrong, not the meter.
+		model, err := iforest.Train(b, withoutSkipped(m.reference, skip), cfg.IForest)
+		if err != nil {
+			return Report{}, fmt.Errorf("train isolation forest: %w", err)
+		}
 		profiles[m.id] = b
+		models[m.id] = model
 	}
 	p.done(StageBaseline)
 
@@ -66,6 +83,15 @@ func Run(ctx context.Context, in Input, cfg Config, progress func(Progress)) (Re
 
 	p.start(StageCorrelation)
 	episodes := classify.Group(signals, cfg.Classify)
+	for i, ep := range episodes {
+		model, trained := models[ep.MeterID]
+		if !trained {
+			continue
+		}
+		if sig, ok := model.Corroborate(ep, analysisReadings[ep.MeterID]); ok {
+			episodes[i].Signals = append(ep.Signals, sig)
+		}
+	}
 	p.done(StageCorrelation)
 
 	p.start(StageEvents)
@@ -105,13 +131,24 @@ func splitByMeter(readings []domain.Reading, referenceDays int) []meterReadings 
 		_, end := baseline.ReferenceWindow(all, referenceDays)
 		m := meterReadings{id: id, all: all}
 		for _, r := range all {
-			if !r.Timestamp.Before(end) {
+			if r.Timestamp.Before(end) {
+				m.reference = append(m.reference, r)
+			} else {
 				m.analysis = append(m.analysis, r)
 			}
 		}
 		out = append(out, m)
 	}
 	return out
+}
+
+// withoutSkipped returns the readings the filter keeps, or all of them when
+// there is no filter.
+func withoutSkipped(readings []domain.Reading, skip func(domain.Reading) bool) []domain.Reading {
+	if skip == nil {
+		return readings
+	}
+	return slices.DeleteFunc(slices.Clone(readings), skip)
 }
 
 func detect(b baseline.Meter, readings []domain.Reading, cfg detectors.Config) []detectors.Signal {

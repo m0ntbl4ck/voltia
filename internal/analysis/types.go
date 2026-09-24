@@ -6,6 +6,7 @@ import (
 	"github.com/m0ntbl4ck/voltia/internal/analysis/baseline"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/iforest"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/scoring"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
@@ -45,6 +46,7 @@ func (r reporter) send(p Progress) {
 type Config struct {
 	Baseline  baseline.Config
 	Detectors detectors.Config
+	IForest   iforest.ModelConfig
 	Classify  classify.Config
 	Scoring   scoring.Config
 	// EventExclusion is how long readings stay out of the baseline after an
@@ -56,6 +58,7 @@ func DefaultConfig() Config {
 	return Config{
 		Baseline:       baseline.DefaultConfig(),
 		Detectors:      detectors.DefaultConfig(),
+		IForest:        iforest.DefaultModelConfig(),
 		Classify:       classify.DefaultConfig(),
 		Scoring:        scoring.DefaultConfig(),
 		EventExclusion: 24 * time.Hour,
