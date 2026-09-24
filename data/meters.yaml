@@ -1,0 +1,39 @@
+# Datos de demostración: los nombres y ubicaciones son ficticios.
+# El dataset del reto solo trae los identificadores M-101 a M-112.
+meters:
+  - meter_id: M-101
+    name: Compresor de aire 1
+    location: Nave 1, cuarto de compresores
+  - meter_id: M-102
+    name: Compresor de aire 2
+    location: Nave 1, cuarto de compresores
+  - meter_id: M-103
+    name: Chiller de agua helada
+    location: Cuarto de máquinas
+  - meter_id: M-104
+    name: Tablero de producción
+    location: Nave 2, zona de envasado
+  - meter_id: M-105
+    name: Bombeo de agua de proceso
+    location: Patio de servicios
+  - meter_id: M-106
+    name: Horno de secado
+    location: Nave 2, zona de secado
+  - meter_id: M-107
+    name: Iluminación y servicios generales
+    location: Nave 1
+  - meter_id: M-108
+    name: Ventilación de nave
+    location: Nave 2, cubierta
+  - meter_id: M-109
+    name: Molino
+    location: Nave 1, zona de molienda
+  - meter_id: M-110
+    name: Caldera
+    location: Cuarto de calderas
+  - meter_id: M-111
+    name: Oficinas y laboratorio
+    location: Edificio administrativo
+  - meter_id: M-112
+    name: Torre de enfriamiento
+    location: Patio de servicios
