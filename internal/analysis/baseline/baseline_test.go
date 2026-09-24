@@ -181,3 +181,24 @@ func TestMeterZUsesTheReadingsHour(t *testing.T) {
 	r := domain.Reading{Timestamp: day0.AddDate(0, 0, 8).Add(3 * time.Hour), ConsumptionKWh: 103 + 2*0.05*103}
 	near(t, "z", m.Z(r, domain.Consumption), 2, 1e-9)
 }
+
+func TestReferenceWindowStartsAtMidnightOfTheEarliestReading(t *testing.T) {
+	readings := series(day0, 2, func(d, h int) float64 { return 1 })
+	// The earliest reading comes last and falls on the previous day.
+	readings = append(readings, domain.Reading{Timestamp: day0.Add(-5 * time.Hour)})
+
+	start, end := ReferenceWindow(readings, 7)
+	if want := day0.AddDate(0, 0, -1); !start.Equal(want) {
+		t.Errorf("start = %v, want %v", start, want)
+	}
+	if want := day0.AddDate(0, 0, 6); !end.Equal(want) {
+		t.Errorf("end = %v, want %v", end, want)
+	}
+}
+
+func TestReferenceWindowWithoutReadingsIsEmpty(t *testing.T) {
+	start, end := ReferenceWindow(nil, 7)
+	if !start.IsZero() || !end.IsZero() {
+		t.Errorf("window = [%v, %v), want zero times", start, end)
+	}
+}
