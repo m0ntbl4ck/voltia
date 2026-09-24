@@ -200,3 +200,25 @@ func TestDatasetIsolationForestBacksUpTheFourCases(t *testing.T) {
 		})
 	}
 }
+
+// The hourly pattern detector joins the two episodes whose day changed shape and
+// leaves the episode bounds where the shift detector put them, which the
+// outage duration and the event window depend on. It stays out of M-104, whose
+// rise keeps the daily shape, and of M-112.
+func TestDatasetHourlyPatternJoinsTheEpisodesThatChangedShape(t *testing.T) {
+	report := runDataset(t)
+	want := map[string]bool{"M-106": true, "M-109": true, "M-104": false, "M-112": false}
+	bounds := map[string][2]time.Time{
+		"M-106": {time.Date(2026, 9, 8, 0, 0, 0, 0, plant), time.Date(2026, 9, 8, 11, 0, 0, 0, plant)},
+		"M-109": {time.Date(2026, 9, 12, 14, 0, 0, 0, plant), time.Date(2026, 9, 14, 23, 0, 0, 0, plant)},
+	}
+	for _, a := range report.Anomalies {
+		meter := a.Episode.MeterID
+		if got := a.Episode.Has(detectors.KindHourlyPattern); got != want[meter] {
+			t.Errorf("%s: has the hourly pattern signal = %v, want %v", meter, got, want[meter])
+		}
+		if b, ok := bounds[meter]; ok && (!a.Episode.Start.Equal(b[0]) || !a.Episode.End.Equal(b[1])) {
+			t.Errorf("%s: episode %v to %v, want %v to %v", meter, a.Episode.Start, a.Episode.End, b[0], b[1])
+		}
+	}
+}

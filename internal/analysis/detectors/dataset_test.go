@@ -1,6 +1,7 @@
 package detectors_test
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -179,5 +180,51 @@ func TestDatasetOutliers(t *testing.T) {
 	}
 	if len(got["M-112"]) != 44 {
 		t.Errorf("M-112 outliers = %d, want 44", len(got["M-112"]))
+	}
+}
+
+// Only the two days whose shape broke: the outage of M-106 on the 8th, which
+// left the first twelve hours near zero, and the day M-109 started to climb at
+// 14:00. The steady rises of M-104 and the rest of M-109 keep the daily shape
+// (correlation 0.97 to 0.99), and the healthy days never fall under 0.93.
+// Expected values come from an independent numpy computation on the same files.
+func TestDatasetHourlyPattern(t *testing.T) {
+	got := run(t, detectors.DetectHourlyPattern)
+	onlyMeters(t, got, "M-106", "M-109")
+	cases := []struct {
+		meter              string
+		start, end         time.Time
+		hours              int
+		corr, ratio, base  float64
+		observed, expected float64
+		meanZ              float64
+	}{
+		{"M-106", ts(8, 0), ts(8, 11), 12, 0.54066, 0.46396, 0.73907, 10.5333, 52.1917, -15.8408},
+		{"M-109", ts(12, 14), ts(12, 23), 10, 0.53411, 0.63421, 0.73590, 97.9600, 46.0370, 21.8155},
+	}
+	for _, c := range cases {
+		t.Run(c.meter, func(t *testing.T) {
+			if len(got[c.meter]) != 1 {
+				t.Fatalf("got %d signals, want 1", len(got[c.meter]))
+			}
+			s := got[c.meter][0]
+			if s.Check != detectors.CheckDailyCorrelation || !s.Start.Equal(c.start) || !s.End.Equal(c.end) || s.Hours != c.hours {
+				t.Errorf("check=%s start=%v end=%v hours=%d, want %s %v to %v (%d hours)", s.Check, s.Start, s.End, s.Hours, detectors.CheckDailyCorrelation, c.start, c.end, c.hours)
+			}
+			for name, want := range map[string]float64{
+				"correlation": c.corr, "night_day_ratio": c.ratio, "baseline_night_day_ratio": c.base,
+			} {
+				if got := s.Metrics[name]; math.Abs(got-want) > 1e-4 {
+					t.Errorf("%s = %.5f, want %.5f", name, got, want)
+				}
+			}
+			for name, pair := range map[string][2]float64{
+				"observed": {s.Observed, c.observed}, "expected": {s.Expected, c.expected}, "mean z": {s.MeanZ, c.meanZ},
+			} {
+				if math.Abs(pair[0]-pair[1]) > 1e-3 {
+					t.Errorf("%s = %.4f, want %.4f", name, pair[0], pair[1])
+				}
+			}
+		})
 	}
 }
