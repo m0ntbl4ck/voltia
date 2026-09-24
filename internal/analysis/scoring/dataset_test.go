@@ -1,6 +1,7 @@
 package scoring_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -8,9 +9,7 @@ import (
 	"time"
 
 	"github.com/m0ntbl4ck/voltia/internal/adapters/seed"
-	"github.com/m0ntbl4ck/voltia/internal/analysis/baseline"
-	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
-	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
+	"github.com/m0ntbl4ck/voltia/internal/analysis"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/scoring"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
@@ -33,8 +32,8 @@ func open(t *testing.T, name string) *os.File {
 	return f
 }
 
-// scoreDataset runs the whole chain over the real files: baseline, detectors,
-// episodes, classification and scoring, on the days after the reference week.
+// scoreDataset runs the whole pipeline over the real files and keeps the score
+// of each meter's episode.
 func scoreDataset(t *testing.T) map[string]scoring.Score {
 	t.Helper()
 	readings, err := seed.ParseReadings(open(t, "readings.csv"), plant)
@@ -45,33 +44,13 @@ func scoreDataset(t *testing.T) map[string]scoring.Score {
 	if err != nil {
 		t.Fatal(err)
 	}
-	by := map[string][]domain.Reading{}
-	for _, r := range readings {
-		by[r.MeterID] = append(by[r.MeterID], r)
-	}
-	dcfg := detectors.DefaultConfig()
-	var signals []detectors.Signal
-	for meter, rs := range by {
-		b, err := baseline.Build(meter, rs, nil, baseline.DefaultConfig())
-		if err != nil {
-			t.Fatal(err)
-		}
-		var analysis []domain.Reading
-		for _, r := range rs {
-			if !r.Timestamp.Before(time.Date(2026, 9, 8, 0, 0, 0, 0, plant)) {
-				analysis = append(analysis, r)
-			}
-		}
-		signals = append(signals, detectors.DetectPersistentShift(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectSpikes(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectOutliers(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectElectricalRelation(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectDataQuality(b, analysis, dcfg)...)
+	report, err := analysis.Run(context.Background(), analysis.Input{Readings: readings, Events: events}, analysis.DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	out := map[string]scoring.Score{}
-	ccfg := classify.DefaultConfig()
-	for _, ep := range classify.Group(signals, ccfg) {
-		out[ep.MeterID] = scoring.Evaluate(classify.Classify(ep, events, ccfg), scoring.DefaultConfig())
+	for _, a := range report.Anomalies {
+		out[a.Episode.MeterID] = a.Score
 	}
 	return out
 }
