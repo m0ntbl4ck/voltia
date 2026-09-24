@@ -65,10 +65,7 @@ func Run(ctx context.Context, in Input, cfg Config, progress func(Progress)) (Re
 	p.done(StageDetection)
 
 	p.start(StageCorrelation)
-	var episodes []classify.Episode
-	if len(signals) > 0 {
-		episodes = classify.Group(signals, cfg.Classify)
-	}
+	episodes := classify.Group(signals, cfg.Classify)
 	p.done(StageCorrelation)
 
 	p.start(StageEvents)
@@ -89,7 +86,8 @@ func Run(ctx context.Context, in Input, cfg Config, progress func(Progress)) (Re
 	return report, nil
 }
 
-// splitByMeter groups the readings by meter in time order, meters sorted by id.
+// splitByMeter groups the readings by meter, meters sorted by id, and splits
+// each meter around its reference window.
 func splitByMeter(readings []domain.Reading, referenceDays int) []meterReadings {
 	byID := map[string][]domain.Reading{}
 	for _, r := range readings {
@@ -104,7 +102,6 @@ func splitByMeter(readings []domain.Reading, referenceDays int) []meterReadings 
 	out := make([]meterReadings, 0, len(ids))
 	for _, id := range ids {
 		all := byID[id]
-		slices.SortFunc(all, func(a, b domain.Reading) int { return a.Timestamp.Compare(b.Timestamp) })
 		_, end := baseline.ReferenceWindow(all, referenceDays)
 		m := meterReadings{id: id, all: all}
 		for _, r := range all {
