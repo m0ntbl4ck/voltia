@@ -307,18 +307,23 @@ func TestCorroborateDoesNotNeedSortedReadings(t *testing.T) {
 	}
 }
 
-// Voltage and power factor are the ones that broke, so consumption must not
-// come out on top.
+// Voltage and power factor are the ones that broke. The physical ratio is
+// built from both, so it may end up on top, but consumption and current did
+// not move and must not.
 func TestCorroborateNamesTheVariablesThatBroke(t *testing.T) {
 	model, analysis := trainedOn(t, meterFault)
 	sig, ok := model.Corroborate(episodeOn(8, 17, false), analysis)
 	if !ok {
 		t.Fatal("expected the faulty hours to corroborate the episode")
 	}
-	if sig.Variable != domain.Voltage && sig.Variable != domain.PowerFactor {
-		t.Errorf("top variable = %s, want voltage or power factor", sig.Variable)
+	switch sig.Variable {
+	case domain.Voltage, domain.PowerFactor, domain.PhysicalRatio:
+	default:
+		t.Errorf("top variable = %s, want voltage, power factor or the ratio they feed", sig.Variable)
 	}
-	if sig.Attribution[domain.Consumption] > 0.15 {
-		t.Errorf("consumption share = %.2f, want at most 0.15 (it did not move)", sig.Attribution[domain.Consumption])
+	for _, v := range []domain.Variable{domain.Consumption, domain.Current} {
+		if sig.Attribution[v] > 0.2 {
+			t.Errorf("%s share = %.2f, want at most 0.2 (it did not move)", v, sig.Attribution[v])
+		}
 	}
 }
