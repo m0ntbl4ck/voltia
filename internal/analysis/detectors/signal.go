@@ -14,6 +14,7 @@ const (
 	KindOutlier            Kind = "OUTLIER"
 	KindElectricalRelation Kind = "ELECTRICAL_RELATION"
 	KindDataQuality        Kind = "DATA_QUALITY"
+	KindHourlyPattern      Kind = "HOURLY_PATTERN"
 	// KindIsolationForest only backs up an episode the other detectors found.
 	KindIsolationForest Kind = "ISOLATION_FOREST"
 )
@@ -35,6 +36,9 @@ type Signal struct {
 	Observed float64
 	Expected float64
 	MeanZ    float64
+	// Metrics are the numbers behind a finding that no other field carries,
+	// named by the detector that sets them.
+	Metrics map[string]float64
 	// Attribution is the share of the finding each variable explains, set only
 	// by the isolation forest, whose signal spans several variables at once.
 	Attribution map[domain.Variable]float64
@@ -58,6 +62,17 @@ type Config struct {
 	// JumpMaxConsumptionZ caps the consumption deviation: an electrical jump with
 	// normal consumption points at the meter, not at the load.
 	JumpMaxConsumptionZ float64
+	// PatternMinCorrelation is the correlation between a day's consumption and
+	// the baseline profile below which the shape of the day is off.
+	PatternMinCorrelation float64
+	// NightStartHour and NightEndHour bound the night: an hour is at night from
+	// NightStartHour on and before NightEndHour, wrapping midnight when the
+	// start is later than the end.
+	NightStartHour int
+	NightEndHour   int
+	// NightDayTolerance is how far the night to day consumption ratio may
+	// stray from the baseline's, as a fraction of it.
+	NightDayTolerance float64
 }
 
 func DefaultConfig() Config {
@@ -71,5 +86,10 @@ func DefaultConfig() Config {
 		JumpZ:               5,
 		JumpNeighborZ:       4,
 		JumpMaxConsumptionZ: 3,
+
+		PatternMinCorrelation: 0.8,
+		NightStartHour:        22,
+		NightEndHour:          6,
+		NightDayTolerance:     0.2,
 	}
 }
