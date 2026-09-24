@@ -222,3 +222,104 @@ func TestTreesGrowUpToTheHeightLimit(t *testing.T) {
 		t.Errorf("deepest tree has height %d, want 7", deepest)
 	}
 }
+
+// x goes right at the root (8 rows, 4 on its side), then left on the second
+// cut (4 rows, 1 on its side). The credit is ln(8/4) for feature 0 and ln(4/1)
+// for feature 1, so their shares are 1/3 and 2/3.
+func TestAttributeOnAHandBuiltTree(t *testing.T) {
+	tree := &node{feature: 0, split: 5, size: 8,
+		left: &node{feature: -1, size: 4},
+		right: &node{feature: 1, split: 2, size: 4,
+			left:  &node{feature: -1, size: 1},
+			right: &node{feature: -1, size: 3},
+		},
+	}
+	f := &Forest{trees: []*node{tree}, sample: 8, features: 3}
+	got := f.Attribute([]float64{9, 0, 0})
+	want := []float64{1.0 / 3, 2.0 / 3, 0}
+	for i := range want {
+		near(t, "share", got[i], want[i])
+	}
+}
+
+// A second tree cuts feature 2 once, leaving x among 2 of 8 rows: ln(8/2).
+func TestAttributeAddsUpTheTrees(t *testing.T) {
+	first := &node{feature: 0, split: 5, size: 8,
+		left: &node{feature: -1, size: 4},
+		right: &node{feature: 1, split: 2, size: 4,
+			left:  &node{feature: -1, size: 1},
+			right: &node{feature: -1, size: 3},
+		},
+	}
+	second := &node{feature: 2, split: 0, size: 8,
+		left:  &node{feature: -1, size: 2},
+		right: &node{feature: -1, size: 6},
+	}
+	f := &Forest{trees: []*node{first, second}, sample: 8, features: 3}
+	got := f.Attribute([]float64{9, 0, -1})
+	// ln2 + ln4 + ln4 = 5 ln2, so the shares are 1/5, 2/5 and 2/5.
+	want := []float64{0.2, 0.4, 0.4}
+	for i := range want {
+		near(t, "share", got[i], want[i])
+	}
+}
+
+// A point exactly on a cut goes left, the same way Score sends it. There it
+// meets a second cut: ln(8/2) goes to feature 0 and ln(2/1) to feature 1, so
+// 2/3 and 1/3. Sent right it would end in a leaf of six with feature 0 alone.
+func TestAttributeSendsAPointOnTheCutLeft(t *testing.T) {
+	tree := &node{feature: 0, split: 5, size: 8,
+		left: &node{feature: 1, split: 1, size: 2,
+			left:  &node{feature: -1, size: 1},
+			right: &node{feature: -1, size: 1},
+		},
+		right: &node{feature: -1, size: 6},
+	}
+	f := &Forest{trees: []*node{tree}, sample: 8, features: 2}
+	got := f.Attribute([]float64{5, 0})
+	near(t, "feature 0", got[0], 2.0/3)
+	near(t, "feature 1", got[1], 1.0/3)
+}
+
+func TestAttributeIsZeroWhenNothingSplits(t *testing.T) {
+	f := &Forest{trees: []*node{{feature: -1, size: 5}}, sample: 5, features: 2}
+	for i, s := range f.Attribute([]float64{1, 1}) {
+		if s != 0 {
+			t.Errorf("share %d = %v, want 0", i, s)
+		}
+	}
+}
+
+// Numpy reference on a similar cloud: the far feature takes about 0.6 of the
+// credit and the other three about 0.13 each; two far features take about 0.4
+// each; at the centre no feature stands out.
+func TestAttributeFindsTheFeaturesThatIsolate(t *testing.T) {
+	f, err := Fit(cloud(400, 4, 3), Config{Trees: 500, SampleSize: 256, Seed: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := func(s []float64) (total float64) {
+		for _, v := range s {
+			total += v
+		}
+		return total
+	}
+
+	one := f.Attribute([]float64{0, 0, 12, 0})
+	near(t, "shares add up", sum(one), 1)
+	if one[2] < 0.5 || one[0] > 0.2 || one[1] > 0.2 || one[3] > 0.2 {
+		t.Errorf("one far feature: shares %.2f, want feature 2 above 0.5 and the rest below 0.2", one)
+	}
+
+	two := f.Attribute([]float64{0, 4, 0, 4})
+	if two[1] < 0.3 || two[3] < 0.3 || two[0] > 0.2 || two[2] > 0.2 {
+		t.Errorf("two far features: shares %.2f, want features 1 and 3 above 0.3 and the rest below 0.2", two)
+	}
+
+	centre := f.Attribute([]float64{0, 0, 0, 0})
+	for i, s := range centre {
+		if s < 0.15 || s > 0.35 {
+			t.Errorf("centre: share %d = %.2f, want between 0.15 and 0.35", i, s)
+		}
+	}
+}

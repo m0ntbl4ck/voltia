@@ -160,3 +160,33 @@ func averagePath(n int) float64 {
 	}
 	return 2*(math.Log(float64(n-1))+eulerGamma) - 2*float64(n-1)/float64(n)
 }
+
+// Attribute says how much of the isolation of x each feature explains, as
+// shares that add up to 1 (all zeros when no tree could split at all). Every
+// cut on x's path narrows the rows that look like x from n to m, and that
+// narrowing, ln(n/m), is credited to the feature that was cut. A feature that
+// isolates x in few cuts collects most of the credit; a feature on which x is
+// ordinary only ever cuts rows that x shares.
+func (f *Forest) Attribute(x []float64) []float64 {
+	credit := make([]float64, f.features)
+	var total float64
+	for _, t := range f.trees {
+		for t.feature >= 0 {
+			next := t.right
+			if x[t.feature] <= t.split {
+				next = t.left
+			}
+			gain := math.Log(float64(t.size) / float64(next.size))
+			credit[t.feature] += gain
+			total += gain
+			t = next
+		}
+	}
+	if total == 0 {
+		return credit
+	}
+	for i := range credit {
+		credit[i] /= total
+	}
+	return credit
+}
