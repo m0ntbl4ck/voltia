@@ -72,3 +72,20 @@ func TestParseEvents(t *testing.T) {
 		t.Errorf("timestamp = %v", got[0].Timestamp)
 	}
 }
+
+func TestParseEventsReadsTheStatedDuration(t *testing.T) {
+	csv := "meter_id,event_timestamp,event_type,description\n" +
+		"M-106,2026-09-08 00:00,SCHEDULED_OUTAGE,Scheduled maintenance outage for 12 hours\n" +
+		"M-104,2026-09-11 00:00,OPERATIONAL_CHANGE,New production line activated\n" +
+		"M-105,2026-09-09 00:00,SCHEDULED_OUTAGE,Short stop for 1 hour\n"
+	got, err := ParseEvents(strings.NewReader(csv), bogota(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []time.Duration{12 * time.Hour, 0, time.Hour}
+	for i, w := range want {
+		if got[i].Duration != w {
+			t.Errorf("event %d duration = %v, want %v", i, got[i].Duration, w)
+		}
+	}
+}
