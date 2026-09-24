@@ -1,13 +1,14 @@
 package classify_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/m0ntbl4ck/voltia/internal/adapters/seed"
-	"github.com/m0ntbl4ck/voltia/internal/analysis/baseline"
+	"github.com/m0ntbl4ck/voltia/internal/analysis"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
@@ -33,9 +34,8 @@ func open(t *testing.T, name string) *os.File {
 	return f
 }
 
-// classifyDataset runs baseline, every detector, episode grouping and
-// classification over the real files, keeping only the days after the
-// reference week.
+// classifyDataset runs the whole pipeline over the real files and keeps the
+// classification of each episode by meter.
 func classifyDataset(t *testing.T) map[string]classify.Result {
 	t.Helper()
 	readings, err := seed.ParseReadings(open(t, "readings.csv"), plant)
@@ -46,36 +46,16 @@ func classifyDataset(t *testing.T) map[string]classify.Result {
 	if err != nil {
 		t.Fatal(err)
 	}
-	by := map[string][]domain.Reading{}
-	for _, r := range readings {
-		by[r.MeterID] = append(by[r.MeterID], r)
-	}
-	dcfg := detectors.DefaultConfig()
-	var signals []detectors.Signal
-	for meter, rs := range by {
-		b, err := baseline.Build(meter, rs, nil, baseline.DefaultConfig())
-		if err != nil {
-			t.Fatal(err)
-		}
-		var analysis []domain.Reading
-		for _, r := range rs {
-			if !r.Timestamp.Before(ts(8, 0)) {
-				analysis = append(analysis, r)
-			}
-		}
-		signals = append(signals, detectors.DetectPersistentShift(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectSpikes(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectOutliers(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectElectricalRelation(b, analysis, dcfg)...)
-		signals = append(signals, detectors.DetectDataQuality(b, analysis, dcfg)...)
+	report, err := analysis.Run(context.Background(), analysis.Input{Readings: readings, Events: events}, analysis.DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
 	out := map[string]classify.Result{}
-	ccfg := classify.DefaultConfig()
-	for _, ep := range classify.Group(signals, ccfg) {
-		if _, dup := out[ep.MeterID]; dup {
-			t.Fatalf("%s has more than one episode", ep.MeterID)
+	for _, a := range report.Anomalies {
+		if _, dup := out[a.Episode.MeterID]; dup {
+			t.Fatalf("%s has more than one episode", a.Episode.MeterID)
 		}
-		out[ep.MeterID] = classify.Classify(ep, events, ccfg)
+		out[a.Episode.MeterID] = a.Result
 	}
 	return out
 }
