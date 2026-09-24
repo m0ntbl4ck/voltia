@@ -9,3 +9,11 @@ const (
 	FalsePositive      AnomalyType = "FALSE_POSITIVE"
 	DataQuality        AnomalyType = "DATA_QUALITY"
 )
+
+type Severity string
+
+const (
+	SeverityHigh   Severity = "HIGH"
+	SeverityMedium Severity = "MEDIUM"
+	SeverityLow    Severity = "LOW"
+)
