@@ -161,6 +161,7 @@ func detect(b baseline.Meter, readings []domain.Reading, cfg detectors.Config) [
 	out = append(out, detectors.DetectOutliers(b, readings, cfg)...)
 	out = append(out, detectors.DetectElectricalRelation(b, readings, cfg)...)
 	out = append(out, detectors.DetectDataQuality(b, readings, cfg)...)
+	out = append(out, detectors.DetectHourlyPattern(b, readings, cfg)...)
 	return out
 }
 

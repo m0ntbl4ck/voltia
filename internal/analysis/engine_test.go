@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 	"errors"
+	"math"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -391,5 +392,61 @@ func TestRunTrainsTheIsolationForestOnTheReferenceWeekOnly(t *testing.T) {
 	}
 	if !report.Anomalies[0].Episode.Has(detectors.KindIsolationForest) {
 		t.Error("the second week should look unusual against a forest that only saw the first")
+	}
+}
+
+// shapedDays gives every day the same daily shape, a swing between 60 and 140
+// kWh peaking at 14:00, with 2% noise. On day 9 the schedule moves six hours
+// later when shifted is true, which changes the shape and not the level.
+func shapedDays(id string, days int, shifted bool) []domain.Reading {
+	rng := rand.New(rand.NewPCG(7, 1))
+	var out []domain.Reading
+	for d := 0; d < days; d++ {
+		for h := 0; h < 24; h++ {
+			at := h
+			if shifted && d == 8 {
+				at = h - 6
+			}
+			kwh := (100 + 40*math.Sin(2*math.Pi*float64(at-8)/24)) * (1 + 0.02*rng.NormFloat64())
+			out = append(out, domain.Reading{
+				MeterID: id, Timestamp: day1.AddDate(0, 0, d).Add(time.Duration(h) * time.Hour),
+				ConsumptionKWh: kwh, VoltageV: 220, CurrentA: kwh, PowerFactor: 0.9,
+			})
+		}
+	}
+	return out
+}
+
+// A meter with a strong daily shape and ordinary noise must stay quiet: the
+// hourly pattern detector opens episodes, so a false alarm here would be an
+// anomaly out of nothing.
+func TestRunKeepsAShapedHealthyMeterQuiet(t *testing.T) {
+	report, err := Run(context.Background(), Input{Readings: shapedDays("M-1", 14, false)}, DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Anomalies) != 0 {
+		t.Errorf("got %d anomalies on a healthy shaped meter, want none: %+v", len(report.Anomalies), report.Anomalies[0].Episode)
+	}
+}
+
+// Nothing here moves the level, so only the daily shape gives it away.
+func TestRunOpensAnEpisodeFromAShiftedSchedule(t *testing.T) {
+	report, err := Run(context.Background(), Input{Readings: shapedDays("M-1", 10, true)}, DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Anomalies) != 1 {
+		t.Fatalf("got %d anomalies, want 1", len(report.Anomalies))
+	}
+	a := report.Anomalies[0]
+	if !a.Episode.Has(detectors.KindHourlyPattern) {
+		t.Error("the episode should come from the hourly pattern detector")
+	}
+	if a.Type != domain.RealAnomaly || a.Rule != classify.RuleNoExplainingEvent {
+		t.Errorf("type=%s rule=%s, want a real anomaly with no explaining event", a.Type, a.Rule)
+	}
+	if a.Episode.Start.Before(day1.AddDate(0, 0, 8)) || a.Episode.End.After(day1.AddDate(0, 0, 9).Add(-time.Hour)) {
+		t.Errorf("episode %v to %v should stay inside day 9", a.Episode.Start, a.Episode.End)
 	}
 }
