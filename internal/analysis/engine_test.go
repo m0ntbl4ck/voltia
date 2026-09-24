@@ -3,11 +3,13 @@ package analysis
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/scoring"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
@@ -251,5 +253,143 @@ func TestSortAnomaliesBreaksTiesTheSameWay(t *testing.T) {
 		if g := (key{got[i].Episode.MeterID, got[i].Episode.Start}); g != w {
 			t.Errorf("position %d = %v, want %v", i, g, w)
 		}
+	}
+}
+
+// noisyDays is meterDays with coherent random noise, which the isolation forest
+// needs to have anything to cut. When surge is true, on day 9 from 10:00 to
+// 15:00 the consumption triples while voltage, current and power factor stay
+// as they were: a single persistent shift, so the forest is the second source.
+func noisyDays(id string, days int, surge bool) []domain.Reading {
+	rng := rand.New(rand.NewPCG(42, 1))
+	var out []domain.Reading
+	for d := 0; d < days; d++ {
+		for h := 0; h < 24; h++ {
+			v := 220 + rng.NormFloat64()
+			i := 100 + 3*rng.NormFloat64()
+			pf := 0.9 + 0.01*rng.NormFloat64()
+			kwh := v * i * pf / 1000 * (1 + 0.03*rng.NormFloat64())
+			if surge && d == 8 && h >= 10 && h <= 15 {
+				kwh *= 3
+			}
+			out = append(out, domain.Reading{
+				MeterID: id, Timestamp: day1.AddDate(0, 0, d).Add(time.Duration(h) * time.Hour),
+				ConsumptionKWh: kwh, VoltageV: v, CurrentA: i, PowerFactor: pf,
+			})
+		}
+	}
+	return out
+}
+
+func TestRunBacksAnEpisodeUpWithTheIsolationForest(t *testing.T) {
+	in := Input{Readings: noisyDays("M-1", 10, true)}
+	with, err := Run(context.Background(), in, DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(with.Anomalies) != 1 {
+		t.Fatalf("got %d anomalies, want 1", len(with.Anomalies))
+	}
+	a := with.Anomalies[0]
+	if !a.Episode.Has(detectors.KindIsolationForest) {
+		t.Fatal("the episode should carry the isolation forest signal")
+	}
+
+	// With a threshold no score can reach the forest stays silent: everything
+	// else about the anomaly must be the same and only the confidence drops.
+	off := DefaultConfig()
+	off.IForest.Threshold = 2
+	without, err := Run(context.Background(), in, off, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := without.Anomalies[0]
+	if b.Episode.Has(detectors.KindIsolationForest) {
+		t.Fatal("no score reaches 2, so there should be no forest signal")
+	}
+	if a.Type != b.Type || a.Rule != b.Rule || a.Score.Severity != b.Score.Severity || a.Score.Priority != b.Score.Priority {
+		t.Errorf("the forest changed the decision: %s %s %s %d against %s %s %s %d",
+			a.Type, a.Rule, a.Score.Severity, a.Score.Priority, b.Type, b.Rule, b.Score.Severity, b.Score.Priority)
+	}
+	if a.Score.Confidence <= b.Score.Confidence {
+		t.Errorf("confidence %.4f with the forest, %.4f without: it should rise", a.Score.Confidence, b.Score.Confidence)
+	}
+}
+
+// The forest only backs episodes up, so even a threshold that flags every
+// reading must not open one on a healthy meter.
+func TestRunNeverOpensAnEpisodeFromTheIsolationForest(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.IForest.Threshold = 0
+	report, err := Run(context.Background(), Input{Readings: noisyDays("M-1", 10, false)}, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Anomalies) != 0 {
+		t.Errorf("got %d anomalies on a healthy meter, want none", len(report.Anomalies))
+	}
+}
+
+// A forest that cannot be trained is a wrong configuration, not a broken
+// meter, so it stops the run instead of being listed as a failure.
+func TestRunFailsWhenTheIsolationForestIsMisconfigured(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.IForest.Forest.Trees = 0
+	report, err := Run(context.Background(), Input{Readings: noisyDays("M-1", 10, false)}, cfg, nil)
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if len(report.Failures) != 0 {
+		t.Errorf("failures = %v, want none", report.Failures)
+	}
+}
+
+// The forest learns from the same reference readings as the baseline. Days 1
+// to 5 carry the same tripled consumption as the breakdown on day 9, each
+// covered by an event. Left in the training data they would make the breakdown
+// look ordinary and the forest would not back the episode up.
+func TestRunTrainsTheIsolationForestWithoutTheEventHours(t *testing.T) {
+	readings := noisyDays("M-1", 10, true)
+	var events []domain.Event
+	for d := 0; d < 5; d++ {
+		from := day1.AddDate(0, 0, d).Add(10 * time.Hour)
+		events = append(events, domain.Event{MeterID: "M-1", Timestamp: from, Type: domain.EventOperationalChange, Duration: 6 * time.Hour})
+		for i, r := range readings {
+			if !r.Timestamp.Before(from) && r.Timestamp.Before(from.Add(6*time.Hour)) {
+				readings[i].ConsumptionKWh *= 3
+			}
+		}
+	}
+	report, err := Run(context.Background(), Input{Readings: readings, Events: events}, DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Anomalies) != 1 {
+		t.Fatalf("got %d anomalies, want 1", len(report.Anomalies))
+	}
+	if !report.Anomalies[0].Episode.Has(detectors.KindIsolationForest) {
+		t.Error("the breakdown should still look unusual once the event hours are kept out of the forest")
+	}
+}
+
+// Consumption triples for the whole second week. A forest that also learned
+// from those days would see half of its data at the tripled level and take it
+// for normal.
+func TestRunTrainsTheIsolationForestOnTheReferenceWeekOnly(t *testing.T) {
+	readings := noisyDays("M-1", 14, false)
+	for i, r := range readings {
+		if !r.Timestamp.Before(day1.AddDate(0, 0, 7)) {
+			readings[i].ConsumptionKWh *= 3
+		}
+	}
+	report, err := Run(context.Background(), Input{Readings: readings}, DefaultConfig(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Anomalies) != 1 {
+		t.Fatalf("got %d anomalies, want 1", len(report.Anomalies))
+	}
+	if !report.Anomalies[0].Episode.Has(detectors.KindIsolationForest) {
+		t.Error("the second week should look unusual against a forest that only saw the first")
 	}
 }

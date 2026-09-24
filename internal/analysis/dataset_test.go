@@ -55,7 +55,10 @@ func runDataset(t *testing.T) analysis.Report {
 // Expected values are the ones computed by hand for each piece: M-109 rises
 // 110.5% with 2825 kWh of excess and no event that explains it, M-104 rises
 // 46.5% after a new production line, M-112 has 16 invalid readings and M-106
-// lost 80% of its consumption during a scheduled outage.
+// lost 80% of its consumption during a scheduled outage. The isolation forest
+// backs all four up, which gives M-104, M-106 and M-112 three independent
+// sources and takes their confidence to the 0.99 ceiling; M-109 had that many
+// already and stays at 0.9875.
 func TestDatasetRegression(t *testing.T) {
 	report := runDataset(t)
 	if len(report.Failures) != 0 {
@@ -70,9 +73,9 @@ func TestDatasetRegression(t *testing.T) {
 		confidence float64
 	}{
 		{"M-109", domain.RealAnomaly, classify.RuleNoExplainingEvent, domain.SeverityHigh, 100, 0.9875},
-		{"M-112", domain.DataQuality, classify.RuleIsolatedElectricalReadings, domain.SeverityHigh, 65, 0.9028},
-		{"M-104", domain.ExplainableAnomaly, classify.RuleOperationalChange, domain.SeverityMedium, 53, 0.9125},
-		{"M-106", domain.FalsePositive, classify.RuleScheduledOutage, domain.SeverityLow, 5, 0.9125},
+		{"M-112", domain.DataQuality, classify.RuleIsolatedElectricalReadings, domain.SeverityHigh, 65, 0.99},
+		{"M-104", domain.ExplainableAnomaly, classify.RuleOperationalChange, domain.SeverityMedium, 53, 0.99},
+		{"M-106", domain.FalsePositive, classify.RuleScheduledOutage, domain.SeverityLow, 5, 0.99},
 	}
 	if len(report.Anomalies) != len(want) {
 		t.Fatalf("got %d anomalies, want %d", len(report.Anomalies), len(want))
@@ -95,8 +98,9 @@ func TestDatasetRegression(t *testing.T) {
 }
 
 func TestDatasetAggregateConfidence(t *testing.T) {
-	if got := runDataset(t).Confidence; got < 0.93 || got > 0.94 {
-		t.Errorf("aggregate confidence = %.4f, want about 0.934", got)
+	// Weights 3, 3, 2 and 1 by severity: (3*0.9875 + 3*0.99 + 2*0.99 + 0.99) / 9.
+	if got := runDataset(t).Confidence; got < 0.9891 || got > 0.9893 {
+		t.Errorf("aggregate confidence = %.4f, want about 0.9892", got)
 	}
 }
 
