@@ -18,4 +18,6 @@ type Event struct {
 	Timestamp   time.Time
 	Type        EventType
 	Description string
+	// Duration is how long the event lasts, or zero when the source does not say.
+	Duration time.Duration
 }
