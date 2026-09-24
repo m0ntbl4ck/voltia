@@ -298,3 +298,121 @@ KPI agregado: promedio **ponderado por severidad** de las anomalías del último
 
 ---
 
+## 7. Modelo de datos
+
+Convención **snake_case** en base de datos, JSON y parámetros de URL.
+
+```mermaid
+erDiagram
+    users ||--o{ anomaly_actions : realiza
+    meters ||--o{ readings : tiene
+    meters ||--o{ events : tiene
+    meters ||--o{ anomalies : tiene
+    anomalies ||--o{ anomaly_actions : historial
+    analysis_runs ||--o{ anomalies : "last_analysis_id"
+
+    users { uuid id PK; text email UK; text password_hash; text name; timestamptz created_at }
+    meters { uuid id PK; text meter_id UK; text name; text location; timestamptz created_at }
+    readings { bigint id PK; text meter_id FK; timestamptz ts; numeric consumption_kwh; numeric voltage_v; numeric current_a; numeric power_factor; text status }
+    events { uuid id PK; text meter_id FK; timestamptz ts; text type; text description }
+    analysis_runs { uuid id PK; text status; text current_stage; jsonb stages; jsonb summary; jsonb params; timestamptz started_at; timestamptz finished_at }
+    anomalies { uuid id PK; text meter_id FK; text fingerprint UK; text type; text severity; numeric confidence; jsonb confidence_breakdown; int priority; jsonb priority_breakdown; timestamptz episode_start; timestamptz episode_end; bool ongoing; jsonb evidence; text reason; text recommended_action; jsonb investigation_steps; text explanation_source; text explanation_model; text status; timestamptz detected_at; uuid last_analysis_id }
+    anomaly_actions { uuid id PK; uuid anomaly_id FK; uuid user_id FK; text action; text note; text from_status; text to_status; timestamptz created_at }
+    explanation_cache { text evidence_hash PK; text provider; text model; jsonb payload; timestamptz created_at }
+```
+
+**Decisiones:**
+- `readings`: `UNIQUE(meter_id, ts)` + índice `(meter_id, ts)`; seed idempotente con `ON CONFLICT DO NOTHING`.
+- Evidencia y desgloses en **jsonb** (formas heterogéneas por detector; siempre se leen completos).
+- **Estado del medidor derivado** de anomalías abiertas (sin sincronización ni doble fuente de verdad).
+- **Baseline y señales crudas no se persisten**; quedan resumidos en `evidence`.
+- `analysis_runs.params` guarda los umbrales usados → **reproducibilidad**.
+- `anomalies.fingerprint` = medidor + tipo + inicio de episodio → **deduplicación** al re-ejecutar (se conserva estado e historial).
+- `meters.yaml` aporta nombres y ubicaciones realistas (contexto industrial colombiano).
+
+### Ciclo de vida de la anomalía
+
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN
+    OPEN --> ACKNOWLEDGED : CREATE_INSPECTION_ORDER / REQUEST_METER_VALIDATION
+    OPEN --> RESOLVED : CONFIRM_OPERATION
+    OPEN --> DISMISSED : DISMISS
+    ACKNOWLEDGED --> RESOLVED : RESOLVE
+    RESOLVED --> [*]
+    DISMISSED --> [*]
+```
+
+| Tipo | Acción principal |
+|---|---|
+| `REAL_ANOMALY` | Crear orden de inspección |
+| `DATA_QUALITY` | Solicitar validación del medidor |
+| `EXPLAINABLE_ANOMALY` | Confirmar operación |
+| `FALSE_POSITIVE` | Descartar |
+
+---
+
+## 8. API REST
+
+Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807** (`application/problem+json`) · documentación en `api/openapi.yaml` + Swagger UI en `/api/docs`. Todo lo que no es `/api` sirve la SPA.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| POST | `/auth/login` · `/auth/logout` | Sesión con cookie httpOnly |
+| GET | `/auth/me` | Usuario actual |
+| GET | `/dashboard/summary` ★ | KPIs, último análisis, top anomalías |
+| GET | `/meters` ★ | `?status=ok,alert,critical&q=&sort=consumption\|variation\|severity&order=` |
+| GET | `/meters/:meter_id` ★ | Consumo reciente, baseline, variación, estado, eléctricas, anomalías abiertas |
+| GET | `/meters/:meter_id/readings` ★ | `?from&to&resolution=hour\|day&include=baseline` |
+| GET | `/meters/:meter_id/events` | Eventos del medidor |
+| GET | `/anomalies` ★ | `?type&severity&status&meter_id`, orden por prioridad |
+| GET | `/anomalies/:id` ★ | Evidencia, desgloses, explicación, eventos relacionados, historial |
+| POST | `/anomalies/:id/actions` | `{action, note}` → nuevo estado + estado del medidor |
+| POST | `/ai/analyze` ★ | **202** `{analysis_id}` |
+| GET | `/ai/analysis/:id` ★ | Estado, etapa, progreso, resumen |
+| GET | `/ai/analysis/latest` | Último análisis |
+| GET | `/healthz` | Salud |
+
+★ = endpoint mínimo del reto. La respuesta de anomalía incluye en su nivel superior los campos exactos del ejemplo del reto: `meter_id, anomaly, type, severity, confidence, reason, recommended_action`.
+
+---
+
+## 9. Frontend y UX
+
+**Dirección visual:** "centro de control" oscuro por defecto (con modo claro), acento ámbar eléctrico, colores semánticos consistentes (Critical rojo · Alert ámbar · OK verde · Calidad de datos violeta · Falso positivo gris). UI en **español (es-CO)**: `2.180 kWh`, `+103,7%`. El diseño y los textos siguen todas las skills de antislop (§11.2), a partir de un `DESIGN.md` del dueño del proyecto.
+
+**Layout:** sidebar (Dashboard · Medidores · Anomalías IA · Análisis · API docs) + topbar con búsqueda global y botón **▶ Run AI Analysis** siempre visible (abre panel lateral con stepper de 7 etapas).
+
+| Pantalla | Contenido clave |
+|---|---|
+| Login | Pre-rellenado + "Entrar como demo" |
+| Dashboard | 6 KPIs del reto, tarjeta "Requiere atención" (top 3), consumo del período, heatmap medidor × día |
+| Medidores | Tabla con chips de filtro, búsqueda, orden y sparkline de 14 días |
+| Detalle | Consumo/baseline/variación/estado; gráfica ECharts con **banda de baseline**, marcadores de eventos y zona anómala; pestañas V/I/FP |
+| Anomalías IA | Medidor · Tipo · Severidad · Confianza · Acción, ordenado por prioridad |
+| Investigación | Narrativa IA + badge de fuente, variables antes → ahora, zoom del episodio, eventos y cómo se trataron, desglose de confianza y prioridad, evidencia por detector, acción + historial |
+| Análisis | Stepper en vivo, resumen ("4 anomalías · 2 prioritarias"), historial de ejecuciones |
+
+**Estado inicial sin análisis:** el dashboard invita a ejecutar Run AI Analysis, para que la demo muestre el antes y el después.
+
+---
+
+## 10. Seguridad y configuración
+
+- JWT firmado (HS256, `JWT_SECRET`), cookie `HttpOnly; SameSite=Lax` (y `Secure` fuera de local); middleware protege todo `/api/v1` excepto login y healthz.
+- Contraseña del usuario demo con bcrypt.
+- Secretos solo por variables de entorno (`.env` en `.gitignore`; `.env.example` documentado).
+- Sin CORS en producción (SPA embebida, mismo origen).
+
+| Variable | Default | Uso |
+|---|---|---|
+| `DATABASE_URL` | compose | Postgres |
+| `JWT_SECRET` | sin valor por defecto | Firma de sesión |
+| `LLM_PROVIDER` | `gemini` | `gemini` · `anthropic` · `template` |
+| `LLM_MODEL` | `gemini-3.8-flash` | Modelo del proveedor |
+| `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | vacío | Sin key → plantillas |
+| `PLANT_TZ` | `America/Bogota` | Zona de los CSV |
+| `ANALYSIS_*` | ver `config` | Umbrales, ventanas y pesos del motor |
+
+---
+
