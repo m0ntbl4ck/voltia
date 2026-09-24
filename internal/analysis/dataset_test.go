@@ -10,6 +10,8 @@ import (
 	"github.com/m0ntbl4ck/voltia/internal/adapters/seed"
 	"github.com/m0ntbl4ck/voltia/internal/analysis"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/iforest"
 	"github.com/m0ntbl4ck/voltia/internal/analysis/scoring"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
@@ -129,5 +131,72 @@ func TestDatasetReportsEveryStageInOrder(t *testing.T) {
 		if got[2*i] != (analysis.Progress{Stage: stage}) || got[2*i+1] != (analysis.Progress{Stage: stage, Done: true}) {
 			t.Errorf("calls %d and %d = %v %v, want %s start then done", 2*i, 2*i+1, got[2*i], got[2*i+1], stage)
 		}
+	}
+}
+
+// What the forest sees in each case. The exact number of unusual hours still
+// moves a little with the seed (across 20 seeds M-104 runs from 93 to 96 of 96
+// hours, M-106 from 7 to 12 of 12 and M-112 from 23 to 26 of 46), so only what
+// holds for every one of them is asserted: a minimum share of unusual hours, a
+// high top score, voltage left out where it did not move, current on top for
+// M-104 and the load taking most of M-106. An independent numpy run on the
+// same files (2000 trees) gives the same picture.
+func TestDatasetIsolationForestBacksUpTheFourCases(t *testing.T) {
+	report := runDataset(t)
+	cases := []struct {
+		meter    string
+		minShare float64
+	}{
+		{"M-109", 0.9},
+		{"M-104", 0.9},
+		{"M-106", 0.5},
+		{"M-112", 0.45},
+	}
+	for _, c := range cases {
+		t.Run(c.meter, func(t *testing.T) {
+			var ep classify.Episode
+			var found []detectors.Signal
+			for _, a := range report.Anomalies {
+				if a.Episode.MeterID != c.meter {
+					continue
+				}
+				ep = a.Episode
+				for _, s := range a.Episode.Signals {
+					if s.Kind == detectors.KindIsolationForest {
+						found = append(found, s)
+					}
+				}
+			}
+			if len(found) != 1 {
+				t.Fatalf("got %d forest signals, want 1", len(found))
+			}
+			sig := found[0]
+			if want := c.minShare * ep.Duration().Hours(); float64(sig.Hours) < want {
+				t.Errorf("%d unusual hours of %.0f, want at least %.0f%%", sig.Hours, ep.Duration().Hours(), c.minShare*100)
+			}
+			if sig.Observed < 0.66 || sig.Observed > 0.8 {
+				t.Errorf("highest score = %.3f, want between 0.66 and 0.8", sig.Observed)
+			}
+			var total float64
+			for _, v := range iforest.Features {
+				total += sig.Attribution[v]
+			}
+			if d := total - 1; d > 1e-9 || d < -1e-9 {
+				t.Errorf("attribution adds up to %v, want 1", total)
+			}
+			if c.meter != "M-112" && sig.Attribution[domain.Voltage] > 0.2 {
+				t.Errorf("voltage share = %.2f, want at most 0.2: voltage did not move", sig.Attribution[domain.Voltage])
+			}
+			switch c.meter {
+			case "M-104":
+				if sig.Variable != domain.Current {
+					t.Errorf("top variable = %s, want current_a", sig.Variable)
+				}
+			case "M-106":
+				if load := sig.Attribution[domain.Consumption] + sig.Attribution[domain.Current]; load < 0.5 {
+					t.Errorf("consumption and current share %.2f together, want at least 0.5: the load is what dropped", load)
+				}
+			}
+		})
 	}
 }
