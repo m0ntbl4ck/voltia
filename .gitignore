@@ -9,6 +9,7 @@ expected_results.csv
 
 # Go
 /bin/
+/voltia
 *.test
 *.out
 coverage.*
