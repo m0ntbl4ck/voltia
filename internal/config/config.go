@@ -15,6 +15,18 @@ type Config struct {
 	PlantTZ     *time.Location
 	// StageDelay pauses after each analysis stage so the progress is readable on screen.
 	StageDelay time.Duration
+	// JWTSecret signs the session tokens.
+	JWTSecret  string
+	SessionTTL time.Duration
+	// Demo is the account created at startup, or the zero value when none is configured.
+	Demo DemoUser
+}
+
+// DemoUser is an account the server creates or updates on every start.
+type DemoUser struct {
+	Email    string
+	Name     string
+	Password string
 }
 
 // Load reads the settings from the environment. DATABASE_URL is required;
@@ -34,11 +46,27 @@ func Load() (Config, error) {
 	if err != nil || stageDelay < 0 {
 		return Config{}, fmt.Errorf("ANALYSIS_STAGE_DELAY %q must be a duration of zero or more, like 300ms", delay)
 	}
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		return Config{}, errors.New("JWT_SECRET is not set; generate one with: openssl rand -hex 32")
+	}
+	ttl := envOr("SESSION_TTL", "12h")
+	sessionTTL, err := time.ParseDuration(ttl)
+	if err != nil || sessionTTL <= 0 {
+		return Config{}, fmt.Errorf("SESSION_TTL %q must be a positive duration, like 12h", ttl)
+	}
+	demo := DemoUser{Email: os.Getenv("DEMO_EMAIL"), Name: envOr("DEMO_NAME", "Demo"), Password: os.Getenv("DEMO_PASSWORD")}
+	if (demo.Email == "") != (demo.Password == "") {
+		return Config{}, errors.New("DEMO_EMAIL and DEMO_PASSWORD must be set together")
+	}
 	return Config{
 		Port:        envOr("PORT", "8080"),
 		DatabaseURL: url,
 		PlantTZ:     loc,
 		StageDelay:  stageDelay,
+		JWTSecret:   secret,
+		SessionTTL:  sessionTTL,
+		Demo:        demo,
 	}, nil
 }
 
