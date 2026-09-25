@@ -8,6 +8,7 @@ import (
 
 	"github.com/m0ntbl4ck/voltia/internal/adapters/postgres/sqlcgen"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
+	"github.com/m0ntbl4ck/voltia/internal/ports"
 )
 
 // Repository stores and reads meters, readings, events, analysis runs and
@@ -115,3 +116,9 @@ func mapAll[In, Out any](in []In, f func(In) Out) []Out {
 	}
 	return out
 }
+
+var (
+	_ ports.Source    = (*Repository)(nil)
+	_ ports.Runs      = (*Repository)(nil)
+	_ ports.Anomalies = (*Repository)(nil)
+)
