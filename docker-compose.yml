@@ -1,4 +1,23 @@
 services:
+  voltia:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://voltia:voltia@postgres:5432/voltia?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env; generate one with openssl rand -hex 32}
+      PLANT_TZ: ${PLANT_TZ:-America/Bogota}
+      SESSION_TTL: ${SESSION_TTL:-12h}
+      DEMO_EMAIL: ${DEMO_EMAIL:-}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+      DEMO_NAME: ${DEMO_NAME:-Demo}
+      ANALYSIS_STAGE_DELAY: ${ANALYSIS_STAGE_DELAY:-300ms}
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
+
   postgres:
     image: postgres:17-alpine
     environment:

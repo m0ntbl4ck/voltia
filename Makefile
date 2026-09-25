@@ -2,7 +2,13 @@
 -include .env
 export
 
-.PHONY: db db-down sqlc dev-api dev-web build test lint
+.PHONY: up down db db-down sqlc dev-api dev-web build test lint
+
+up:
+	docker compose up -d --build --wait
+
+down:
+	docker compose down
 
 db:
 	docker compose up -d --wait postgres
