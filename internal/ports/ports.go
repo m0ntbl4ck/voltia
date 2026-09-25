@@ -65,3 +65,12 @@ type Users interface {
 type Explainer interface {
 	Explain(ctx context.Context, ev domain.Evidence) (domain.Explanation, error)
 }
+
+// ExplanationCache remembers the text a language model wrote for a piece of
+// evidence, so running the analysis again is instant and says the same thing.
+type ExplanationCache interface {
+	// CachedExplanation returns the stored text for key, and false when there is none.
+	CachedExplanation(ctx context.Context, key string) (domain.Explanation, bool, error)
+	// CacheExplanation stores exp under key. Storing the same key twice keeps the first.
+	CacheExplanation(ctx context.Context, key, provider string, exp domain.Explanation) error
+}
