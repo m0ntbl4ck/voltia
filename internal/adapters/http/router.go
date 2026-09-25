@@ -24,6 +24,7 @@ type RunReader interface {
 
 // Deps is what the handlers need.
 type Deps struct {
+	Auth     Authenticator
 	Analysis Starter
 	Runs     RunReader
 	Logger   *slog.Logger
@@ -40,8 +41,14 @@ func NewRouter(d Deps) http.Handler {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	auth := authResource{auth: d.Auth, log: log}
 	r.Route("/api/v1", func(r chi.Router) {
-		analysisResource{starter: d.Analysis, runs: d.Runs, log: log}.routes(r)
+		auth.public(r)
+		r.Group(func(r chi.Router) {
+			r.Use(auth.requireSession)
+			auth.protected(r)
+			analysisResource{starter: d.Analysis, runs: d.Runs, log: log}.routes(r)
+		})
 	})
 	return r
 }

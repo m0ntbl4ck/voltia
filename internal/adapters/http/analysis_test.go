@@ -48,10 +48,24 @@ func (f *fakeRuns) LatestRun(context.Context) (domain.AnalysisRun, error) {
 }
 
 func newServer(starter *fakeStarter, runs *fakeRuns) http.Handler {
-	return NewRouter(Deps{Analysis: starter, Runs: runs, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	return newServerWithAuth(starter, runs, newFakeAuth())
 }
 
+func newServerWithAuth(starter *fakeStarter, runs *fakeRuns, auth Authenticator) http.Handler {
+	return NewRouter(Deps{Auth: auth, Analysis: starter, Runs: runs, Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+}
+
+// do sends the request with a valid session.
 func do(h http.Handler, method, path string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookie, Value: validToken})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// doAnon sends the request with no session.
+func doAnon(h http.Handler, method, path string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
 	return rec
