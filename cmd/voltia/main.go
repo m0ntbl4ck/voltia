@@ -80,7 +80,7 @@ func run() error {
 		log.Print("demo user ready")
 	}
 
-	handler := httpapi.NewRouter(httpapi.Deps{Auth: auth, Analysis: analyses, Runs: repo})
+	handler := httpapi.NewRouter(httpapi.Deps{Auth: auth, Analysis: analyses, Runs: repo, Anomalies: repo})
 	return serve(ctx, &http.Server{Addr: ":" + cfg.Port, Handler: handler})
 }
 
