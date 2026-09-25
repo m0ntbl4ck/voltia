@@ -64,6 +64,12 @@ func (r *Repository) LatestRun(ctx context.Context) (domain.AnalysisRun, error) 
 	return r.oneRun(r.q.GetLatestRun(ctx))
 }
 
+// LatestCompletedRun returns the last run that finished well, or
+// domain.ErrNotFound when none has. A run still going or one that failed is skipped.
+func (r *Repository) LatestCompletedRun(ctx context.Context) (domain.AnalysisRun, error) {
+	return r.oneRun(r.q.GetLatestCompletedRun(ctx))
+}
+
 // ActiveRun returns the run still going, or domain.ErrNotFound when none is.
 func (r *Repository) ActiveRun(ctx context.Context) (domain.AnalysisRun, error) {
 	return r.oneRun(r.q.GetActiveRun(ctx))

@@ -37,6 +37,8 @@ type Runs interface {
 	FinishRun(ctx context.Context, id string, status domain.RunStatus, stages []domain.StageState, summary domain.RunSummary) error
 	Run(ctx context.Context, id string) (domain.AnalysisRun, error)
 	LatestRun(ctx context.Context) (domain.AnalysisRun, error)
+	// LatestCompletedRun skips runs that are still going or failed.
+	LatestCompletedRun(ctx context.Context) (domain.AnalysisRun, error)
 	ActiveRun(ctx context.Context) (domain.AnalysisRun, error)
 }
 

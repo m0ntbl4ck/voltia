@@ -84,6 +84,29 @@ func (q *Queries) GetActiveRun(ctx context.Context) (AnalysisRun, error) {
 	return i, err
 }
 
+const getLatestCompletedRun = `-- name: GetLatestCompletedRun :one
+SELECT id, status, current_stage, stages, summary, params, started_at, finished_at FROM analysis_runs
+WHERE status = 'COMPLETED'
+ORDER BY started_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestCompletedRun(ctx context.Context) (AnalysisRun, error) {
+	row := q.db.QueryRowContext(ctx, getLatestCompletedRun)
+	var i AnalysisRun
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.CurrentStage,
+		&i.Stages,
+		&i.Summary,
+		&i.Params,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const getLatestRun = `-- name: GetLatestRun :one
 SELECT id, status, current_stage, stages, summary, params, started_at, finished_at FROM analysis_runs ORDER BY started_at DESC LIMIT 1
 `

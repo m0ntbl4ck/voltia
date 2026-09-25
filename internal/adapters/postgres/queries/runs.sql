@@ -24,3 +24,9 @@ SELECT * FROM analysis_runs
 WHERE status IN ('PENDING', 'RUNNING')
 ORDER BY started_at DESC
 LIMIT 1;
+
+-- name: GetLatestCompletedRun :one
+SELECT * FROM analysis_runs
+WHERE status = 'COMPLETED'
+ORDER BY started_at DESC
+LIMIT 1;

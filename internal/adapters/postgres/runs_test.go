@@ -107,3 +107,38 @@ func TestRunFailureKeepsTheError(t *testing.T) {
 		t.Errorf("Run(missing) = %v, want ErrNotFound", err)
 	}
 }
+
+func TestLatestCompletedRunSkipsUnfinishedAndFailedRuns(t *testing.T) {
+	repo, _, _ := seededRepository(t)
+	ctx := context.Background()
+	if _, err := repo.LatestCompletedRun(ctx); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("with no runs: %v, want ErrNotFound", err)
+	}
+
+	older, err := repo.CreateRun(ctx, json.RawMessage(`{}`), pendingStages())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.FinishRun(ctx, older.ID, domain.RunCompleted, pendingStages(), domain.RunSummary{Anomalies: 1}); err != nil {
+		t.Fatal(err)
+	}
+	done, err := repo.CreateRun(ctx, json.RawMessage(`{}`), pendingStages())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.FinishRun(ctx, done.ID, domain.RunCompleted, pendingStages(), domain.RunSummary{Anomalies: 4}); err != nil {
+		t.Fatal(err)
+	}
+	failed, _ := repo.CreateRun(ctx, json.RawMessage(`{}`), pendingStages())
+	if err := repo.FinishRun(ctx, failed.ID, domain.RunFailed, pendingStages(), domain.RunSummary{Error: "boom"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.CreateRun(ctx, json.RawMessage(`{}`), pendingStages()); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repo.LatestCompletedRun(ctx)
+	if err != nil || got.ID != done.ID || got.Summary == nil || got.Summary.Anomalies != 4 {
+		t.Errorf("LatestCompletedRun = %+v, %v; want the completed run %s", got, err, done.ID)
+	}
+}

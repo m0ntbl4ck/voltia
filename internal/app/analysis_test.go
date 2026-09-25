@@ -115,6 +115,17 @@ func (m *memory) LatestRun(context.Context) (domain.AnalysisRun, error) {
 	return m.runs[len(m.runs)-1], nil
 }
 
+func (m *memory) LatestCompletedRun(context.Context) (domain.AnalysisRun, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := len(m.runs) - 1; i >= 0; i-- {
+		if m.runs[i].Status == domain.RunCompleted {
+			return m.runs[i], nil
+		}
+	}
+	return domain.AnalysisRun{}, domain.ErrNotFound
+}
+
 func (m *memory) ActiveRun(context.Context) (domain.AnalysisRun, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
