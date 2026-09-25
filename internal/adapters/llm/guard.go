@@ -99,10 +99,19 @@ func walk(node any, loc *time.Location, out *[]float64) {
 	case float64:
 		*out = append(*out, v)
 	case string:
-		// A zero time is an unset field, not a moment the text may mention.
-		if t, err := time.Parse(time.RFC3339, v); err == nil && !t.IsZero() {
-			t = t.In(loc)
-			*out = append(*out, float64(t.Day()), float64(t.Hour()), float64(t.Minute()))
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			// A zero time is an unset field, not a moment the text may mention.
+			if !t.IsZero() {
+				t = t.In(loc)
+				*out = append(*out, float64(t.Day()), float64(t.Hour()), float64(t.Minute()))
+			}
+			return
+		}
+		// Names, places and event descriptions carry numbers of their own,
+		// like "Nave 2" or "outage for 12 hours", and the text may repeat them.
+		for _, tok := range number.FindAllString(v, -1) {
+			value, _ := parseNumber(tok)
+			*out = append(*out, value)
 		}
 	case []any:
 		for _, x := range v {

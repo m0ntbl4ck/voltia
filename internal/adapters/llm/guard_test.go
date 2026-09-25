@@ -52,6 +52,20 @@ func TestCheckNumbersAcceptsWhatTheEvidenceHolds(t *testing.T) {
 	}
 }
 
+func TestCheckNumbersAcceptsNumbersInNamesAndDescriptions(t *testing.T) {
+	ev := surge()
+	ev.Location = "Nave 2, zona de molienda"
+	ev.Events = []domain.EventEvidence{{Description: "Scheduled outage for 12 hours"}}
+	for _, text := range []string{"Está en la Nave 2.", "El evento dura 12 horas."} {
+		if err := CheckNumbers(text, ev, plantTime(t)); err != nil {
+			t.Errorf("%q: %v", text, err)
+		}
+	}
+	if err := CheckNumbers("Está en la Nave 3.", ev, plantTime(t)); err == nil {
+		t.Error("a Nave that is not in the evidence was accepted")
+	}
+}
+
 func TestCheckNumbersRejectsWhatItInvents(t *testing.T) {
 	loc := plantTime(t)
 	tests := []struct {
