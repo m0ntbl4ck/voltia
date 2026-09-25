@@ -69,7 +69,18 @@ func run() error {
 		return err
 	}
 
-	handler := httpapi.NewRouter(httpapi.Deps{Analysis: analyses, Runs: repo})
+	auth, err := app.NewAuth(repo, app.AuthOptions{Secret: cfg.JWTSecret, TTL: cfg.SessionTTL})
+	if err != nil {
+		return err
+	}
+	if cfg.Demo.Email != "" {
+		if err := app.EnsureUser(ctx, repo, cfg.Demo.Email, cfg.Demo.Name, cfg.Demo.Password); err != nil {
+			return err
+		}
+		log.Print("demo user ready")
+	}
+
+	handler := httpapi.NewRouter(httpapi.Deps{Auth: auth, Analysis: analyses, Runs: repo})
 	return serve(ctx, &http.Server{Addr: ":" + cfg.Port, Handler: handler})
 }
 

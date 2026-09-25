@@ -1,3 +1,7 @@
+# Local settings live in .env, which is not versioned; see .env.example.
+-include .env
+export
+
 .PHONY: db db-down sqlc dev-api dev-web build test lint
 
 db:
