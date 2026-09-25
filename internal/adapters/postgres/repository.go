@@ -121,4 +121,5 @@ var (
 	_ ports.Source    = (*Repository)(nil)
 	_ ports.Runs      = (*Repository)(nil)
 	_ ports.Anomalies = (*Repository)(nil)
+	_ ports.Users     = (*Repository)(nil)
 )

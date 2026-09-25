@@ -32,6 +32,15 @@ type Anomalies interface {
 	UpsertAnomalies(ctx context.Context, anomalies []domain.Anomaly) error
 }
 
+// Users keeps the accounts that can sign in. Lookups return domain.ErrNotFound
+// when nothing matches.
+type Users interface {
+	UserByEmail(ctx context.Context, email string) (domain.User, error)
+	UserByID(ctx context.Context, id string) (domain.User, error)
+	// SaveUser creates the user, or updates the name and password hash when the email exists.
+	SaveUser(ctx context.Context, email, name, passwordHash string) (domain.User, error)
+}
+
 // Explainer writes the text an operator reads about an anomaly. It works only
 // from the evidence and never changes the type, severity or confidence.
 // Implementations fall back to templates on their own, so an error here is
