@@ -413,6 +413,9 @@ func TestCloseCancelsARunAndRecordsIt(t *testing.T) {
 	if run.Status != domain.RunFailed || run.FinishedAt == nil {
 		t.Errorf("cancelled run = %+v", run)
 	}
+	if run.Summary == nil || run.Summary.Error != "interrupted because the server was shutting down" {
+		t.Errorf("summary = %+v, want the shutdown to be named, not a bare context error", run.Summary)
+	}
 	if _, err := svc.Start(context.Background()); err == nil {
 		t.Error("Start after Close should fail")
 	}

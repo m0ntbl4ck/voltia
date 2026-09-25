@@ -125,8 +125,12 @@ func (s *AnalysisService) execute(run domain.AnalysisRun) {
 	defer cancel()
 	status := domain.RunCompleted
 	if err != nil {
-		s.opts.Logger.Error("analysis run failed", "run", run.ID, "error", err)
-		status, summary = domain.RunFailed, domain.RunSummary{Error: err.Error()}
+		msg := err.Error()
+		if errors.Is(err, context.Canceled) {
+			msg = "interrupted because the server was shutting down"
+		}
+		s.opts.Logger.Error("analysis run failed", "run", run.ID, "error", msg)
+		status, summary = domain.RunFailed, domain.RunSummary{Error: msg}
 	}
 	if err := s.runs.FinishRun(ctx, run.ID, status, tr.stages, summary); err != nil {
 		s.opts.Logger.Error("could not close the analysis run", "run", run.ID, "error", err)
