@@ -10,12 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/m0ntbl4ck/voltia/data"
+	httpapi "github.com/m0ntbl4ck/voltia/internal/adapters/http"
+	"github.com/m0ntbl4ck/voltia/internal/adapters/llm/template"
 	"github.com/m0ntbl4ck/voltia/internal/adapters/postgres"
 	"github.com/m0ntbl4ck/voltia/internal/adapters/seed"
+	"github.com/m0ntbl4ck/voltia/internal/analysis"
+	"github.com/m0ntbl4ck/voltia/internal/app"
 	"github.com/m0ntbl4ck/voltia/internal/config"
 )
 
@@ -54,12 +57,20 @@ func run() error {
 	}
 	log.Printf("seed added %d meters, %d readings, %d events", added.Meters, added.Readings, added.Events)
 
-	r := chi.NewRouter()
-	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	repo := postgres.NewRepository(db, cfg.PlantTZ)
+	analyses := app.NewAnalysisService(repo, repo, repo, template.New(cfg.PlantTZ), app.AnalysisOptions{
+		Config:     analysis.DefaultConfig(),
+		StageDelay: cfg.StageDelay,
 	})
-	return serve(ctx, &http.Server{Addr: ":" + cfg.Port, Handler: r})
+	// Closing the service cancels a run in progress and lets it record how it
+	// ended, so it must run before the database closes.
+	defer analyses.Close()
+	if err := analyses.Recover(ctx); err != nil {
+		return err
+	}
+
+	handler := httpapi.NewRouter(httpapi.Deps{Analysis: analyses, Runs: repo})
+	return serve(ctx, &http.Server{Addr: ":" + cfg.Port, Handler: handler})
 }
 
 // serve runs srv until ctx is cancelled, then gives in-flight requests
