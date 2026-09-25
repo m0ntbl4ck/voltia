@@ -280,9 +280,11 @@ Las fórmulas internas de cada componente son de esta implementación: el diseñ
 
 ### 5.8 Estado del medidor (derivado, no persistido)
 
-- **Critical:** tiene una `REAL_ANOMALY` HIGH abierta.
-- **Alert:** tiene una anomalía abierta MEDIUM+ que no es FP, o una `DATA_QUALITY`.
-- **OK:** sin anomalías abiertas o solo falsos positivos.
+- **Critical:** tiene una `REAL_ANOMALY` HIGH sin resolver.
+- **Alert:** tiene una anomalía sin resolver MEDIUM+ que no es FP, o una `DATA_QUALITY`.
+- **OK:** sin anomalías sin resolver o solo falsos positivos.
+
+"Sin resolver" son las `OPEN` y las `ACKNOWLEDGED`: con la orden de inspección creada el problema sigue ahí, así que el medidor no vuelve a OK hasta que la anomalía se resuelve o se descarta. En cambio, las "pendientes" del dashboard son solo las `OPEN`. Lo calcula `domain.StatusOf` y el servicio de medidores; no se guarda.
 
 ### 5.9 Resultado esperado sobre el dataset (verificado por test de regresión)
 
@@ -294,7 +296,7 @@ Las fórmulas internas de cada componente son de esta implementación: el diseñ
 | **M-106** | caída de 12 h el 8-sep, coincide exactamente con parada programada | `FALSE_POSITIVE` | LOW | 5 | 0,99 |
 | Resto (8) | sin desviaciones | no aplica | no aplica | no aplica | no aplica |
 
-Confianza agregada: 0,989. El estado del medidor (5.8) todavía no está implementado.
+Confianza agregada: 0,989. El estado del medidor (5.8) sale de estas anomalías: M-109 crítico, M-112 y M-104 en alerta y M-106 en OK.
 
 > Estos asserts se derivan de la tabla pública de la sección 9 del reto, no de `expected_results.csv`.
 
@@ -558,6 +560,8 @@ Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria c
 - Baseline con solo 7 días de referencia: no separa días laborales de fines de semana.
 - Umbrales ajustados a un dataset pequeño; en producción se calibrarían con historial y feedback de operadores (las acciones DISMISS/RESOLVE son la semilla de ese feedback).
 - Análisis en proceso (goroutine); a escala se movería a una cola/worker.
+- La huella (medidor, tipo, inicio del episodio) identifica una anomalía entre ejecuciones. Una anomalía resuelta o descartada que sigue ocurriendo en un análisis nuevo conserva su estado y no se reabre; y una que el análisis nuevo ya no detecta queda como estaba, sin cerrarse sola.
+- El baseline no se guarda: los endpoints de medidores lo reconstruyen en cada petición desde las lecturas. Con 12 medidores y 14 días es inmediato; a escala se guardaría con el análisis.
 - Futuro: deploy en nube, SSE para progreso, multi-tenant y roles, notificaciones, ingesta en streaming.
 
 ---
