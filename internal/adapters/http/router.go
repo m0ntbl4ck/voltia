@@ -41,9 +41,11 @@ func NewRouter(d Deps) http.Handler {
 	}
 	r := chi.NewRouter()
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	docsRoutes(r)
 	auth := authResource{auth: d.Auth, log: log}
 	r.Route("/api/v1", func(r chi.Router) {
 		auth.public(r)
