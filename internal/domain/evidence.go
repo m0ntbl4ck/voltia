@@ -21,11 +21,13 @@ type Evidence struct {
 	DurationH    int         `json:"duration_hours"`
 	Ongoing      bool        `json:"ongoing"`
 	// Direction is UP, DOWN or NONE, the side of the consumption shift.
-	Direction    string           `json:"direction"`
-	VariationPct float64          `json:"variation_pct"`
-	ExcessKWh    float64          `json:"excess_kwh"`
-	Signals      []SignalEvidence `json:"signals"`
-	Events       []EventEvidence  `json:"events"`
+	Direction    string  `json:"direction"`
+	VariationPct float64 `json:"variation_pct"`
+	ExcessKWh    float64 `json:"excess_kwh"`
+	// InvalidReadings counts the readings the data quality detector flagged.
+	InvalidReadings int              `json:"invalid_readings"`
+	Signals         []SignalEvidence `json:"signals"`
+	Events          []EventEvidence  `json:"events"`
 }
 
 // SignalEvidence is one detector finding behind an anomaly.

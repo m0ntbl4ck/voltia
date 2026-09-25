@@ -12,6 +12,8 @@ import (
 	"github.com/m0ntbl4ck/voltia/data"
 	"github.com/m0ntbl4ck/voltia/internal/adapters/seed"
 	"github.com/m0ntbl4ck/voltia/internal/analysis"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/classify"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
 
@@ -88,8 +90,38 @@ func TestBuildEvidenceForTheUnexplainedSurge(t *testing.T) {
 	if !forest {
 		t.Error("the isolation forest signal lost its attribution")
 	}
+	if ev.InvalidReadings != 0 {
+		t.Errorf("a surge has %d invalid readings, want none", ev.InvalidReadings)
+	}
 	if len(ev.Events) != 1 || ev.Events[0].Type != domain.EventUnknown || ev.Events[0].Role != "NOT_EXPLANATORY" {
 		t.Errorf("events = %+v, want the one UNKNOWN event that explains nothing", ev.Events)
+	}
+}
+
+func TestBuildEvidenceCountsTheInvalidReadings(t *testing.T) {
+	report, meters := datasetRun(t)
+	for _, a := range report.Anomalies {
+		if a.Episode.MeterID != "M-112" {
+			continue
+		}
+		if got := BuildEvidence(a, meters["M-112"]).InvalidReadings; got != 16 {
+			t.Errorf("M-112 has %d invalid readings, want the 16 of the design", got)
+		}
+	}
+}
+
+func TestInvalidReadingsAddUpTheHoursOfEachFlaggedSignal(t *testing.T) {
+	start := time.Date(2026, 9, 13, 5, 0, 0, 0, time.UTC)
+	a := analysis.Anomaly{Result: classify.Result{Episode: classify.Episode{
+		MeterID: "M-112", Start: start, End: start.Add(4 * time.Hour),
+		Signals: []detectors.Signal{
+			{Kind: detectors.KindDataQuality, Hours: 2},
+			{Kind: detectors.KindDataQuality, Hours: 3},
+			{Kind: detectors.KindOutlier, Hours: 7},
+		},
+	}}}
+	if got := BuildEvidence(a, domain.Meter{}).InvalidReadings; got != 5 {
+		t.Errorf("InvalidReadings = %d, want 5 (2 + 3, the outlier does not count)", got)
 	}
 }
 

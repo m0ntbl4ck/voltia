@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/m0ntbl4ck/voltia/internal/analysis"
+	"github.com/m0ntbl4ck/voltia/internal/analysis/detectors"
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
 
@@ -38,6 +39,9 @@ func BuildEvidence(a analysis.Anomaly, meter domain.Meter) domain.Evidence {
 		Events:       make([]domain.EventEvidence, 0, len(a.Events)),
 	}
 	for _, s := range ep.Signals {
+		if s.Kind == detectors.KindDataQuality {
+			ev.InvalidReadings += s.Hours
+		}
 		ev.Signals = append(ev.Signals, domain.SignalEvidence{
 			Kind:        string(s.Kind),
 			Check:       s.Check,
