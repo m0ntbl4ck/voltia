@@ -13,6 +13,9 @@ services:
       DEMO_EMAIL: ${DEMO_EMAIL:-}
       DEMO_PASSWORD: ${DEMO_PASSWORD:-}
       DEMO_NAME: ${DEMO_NAME:-Demo}
+      LLM_PROVIDER: ${LLM_PROVIDER:-gemini}
+      LLM_MODEL: ${LLM_MODEL:-gemini-3.8-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ANALYSIS_STAGE_DELAY: ${ANALYSIS_STAGE_DELAY:-300ms}
     ports:
       - "${PORT:-8080}:8080"

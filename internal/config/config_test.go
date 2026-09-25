@@ -128,3 +128,38 @@ func TestLoadRejectsAHalfConfiguredDemoUserAndABadTTL(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadReadsTheLanguageModelSettings(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("LLM_PROVIDER", "")
+	t.Setenv("LLM_MODEL", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LLMProvider != "gemini" || cfg.LLMModel != "gemini-3.8-flash" || cfg.GeminiAPIKey != "" {
+		t.Errorf("defaults = %q %q %q", cfg.LLMProvider, cfg.LLMModel, cfg.GeminiAPIKey)
+	}
+
+	t.Setenv("LLM_PROVIDER", "template")
+	t.Setenv("LLM_MODEL", "other-model")
+	t.Setenv("GEMINI_API_KEY", "key")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.LLMProvider != "template" || cfg.LLMModel != "other-model" || cfg.GeminiAPIKey != "key" {
+		t.Errorf("overrides = %q %q %q", cfg.LLMProvider, cfg.LLMModel, cfg.GeminiAPIKey)
+	}
+}
+
+func TestLoadRejectsAnUnknownProvider(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("JWT_SECRET", "s")
+	t.Setenv("LLM_PROVIDER", "gpt")
+	if _, err := Load(); err == nil {
+		t.Error("expected an error for an unknown LLM_PROVIDER")
+	}
+}

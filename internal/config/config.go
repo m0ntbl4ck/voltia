@@ -18,6 +18,10 @@ type Config struct {
 	// JWTSecret signs the session tokens.
 	JWTSecret  string
 	SessionTTL time.Duration
+	// LLMProvider is gemini or template. Without an API key gemini falls back to template.
+	LLMProvider  string
+	LLMModel     string
+	GeminiAPIKey string
 	// Demo is the account created at startup, or the zero value when none is configured.
 	Demo DemoUser
 }
@@ -59,14 +63,21 @@ func Load() (Config, error) {
 	if (demo.Email == "") != (demo.Password == "") {
 		return Config{}, errors.New("DEMO_EMAIL and DEMO_PASSWORD must be set together")
 	}
+	provider := envOr("LLM_PROVIDER", "gemini")
+	if provider != "gemini" && provider != "template" {
+		return Config{}, fmt.Errorf("LLM_PROVIDER %q must be gemini or template", provider)
+	}
 	return Config{
-		Port:        envOr("PORT", "8080"),
-		DatabaseURL: url,
-		PlantTZ:     loc,
-		StageDelay:  stageDelay,
-		JWTSecret:   secret,
-		SessionTTL:  sessionTTL,
-		Demo:        demo,
+		LLMProvider:  provider,
+		LLMModel:     envOr("LLM_MODEL", "gemini-3.8-flash"),
+		GeminiAPIKey: os.Getenv("GEMINI_API_KEY"),
+		Port:         envOr("PORT", "8080"),
+		DatabaseURL:  url,
+		PlantTZ:      loc,
+		StageDelay:   stageDelay,
+		JWTSecret:    secret,
+		SessionTTL:   sessionTTL,
+		Demo:         demo,
 	}, nil
 }
 

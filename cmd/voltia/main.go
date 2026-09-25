@@ -14,12 +14,15 @@ import (
 
 	"github.com/m0ntbl4ck/voltia/data"
 	httpapi "github.com/m0ntbl4ck/voltia/internal/adapters/http"
+	"github.com/m0ntbl4ck/voltia/internal/adapters/llm"
+	"github.com/m0ntbl4ck/voltia/internal/adapters/llm/gemini"
 	"github.com/m0ntbl4ck/voltia/internal/adapters/llm/template"
 	"github.com/m0ntbl4ck/voltia/internal/adapters/postgres"
 	"github.com/m0ntbl4ck/voltia/internal/adapters/seed"
 	"github.com/m0ntbl4ck/voltia/internal/analysis"
 	"github.com/m0ntbl4ck/voltia/internal/app"
 	"github.com/m0ntbl4ck/voltia/internal/config"
+	"github.com/m0ntbl4ck/voltia/internal/ports"
 )
 
 func main() {
@@ -58,7 +61,7 @@ func run() error {
 	log.Printf("seed added %d meters, %d readings, %d events", added.Meters, added.Readings, added.Events)
 
 	repo := postgres.NewRepository(db, cfg.PlantTZ)
-	analyses := app.NewAnalysisService(repo, repo, repo, template.New(cfg.PlantTZ), app.AnalysisOptions{
+	analyses := app.NewAnalysisService(repo, repo, repo, newExplainer(cfg, repo), app.AnalysisOptions{
 		Config:     analysis.DefaultConfig(),
 		StageDelay: cfg.StageDelay,
 	})
@@ -86,6 +89,24 @@ func run() error {
 		Dashboard: app.NewDashboardService(meters, repo, repo),
 	})
 	return serve(ctx, &http.Server{Addr: ":" + cfg.Port, Handler: handler})
+}
+
+// newExplainer picks who writes the explanations. The template explainer is
+// always the base: the model, when there is one, only adds to it.
+func newExplainer(cfg config.Config, cache ports.ExplanationCache) ports.Explainer {
+	fallback := template.New(cfg.PlantTZ)
+	switch {
+	case cfg.LLMProvider == "template":
+		log.Print("explanations: templates")
+		return fallback
+	case cfg.GeminiAPIKey == "":
+		log.Print("explanations: templates (GEMINI_API_KEY is not set)")
+		return fallback
+	}
+	log.Printf("explanations: %s, with templates as fallback", cfg.LLMModel)
+	return llm.New(gemini.New(cfg.GeminiAPIKey, cfg.LLMModel), llm.Options{
+		Fallback: fallback, Cache: cache, Loc: cfg.PlantTZ,
+	})
 }
 
 // serve runs srv until ctx is cancelled, then gives in-flight requests
