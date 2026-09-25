@@ -10,15 +10,17 @@ import (
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
 
-// Repository reads meters, readings and events. Timestamps come back in loc,
-// the plant time zone, so a reading's Hour() is the one operators see.
+// Repository stores and reads meters, readings, events, analysis runs and
+// anomalies. Timestamps come back in loc, the plant time zone, so a reading's
+// Hour() is the one operators see.
 type Repository struct {
+	db  *sql.DB
 	q   *sqlcgen.Queries
 	loc *time.Location
 }
 
 func NewRepository(db *sql.DB, loc *time.Location) *Repository {
-	return &Repository{q: sqlcgen.New(db), loc: loc}
+	return &Repository{db: db, q: sqlcgen.New(db), loc: loc}
 }
 
 // Meters lists every meter ordered by meter_id.

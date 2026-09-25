@@ -65,6 +65,14 @@ type Explanation struct {
 	Model string
 }
 
+// AnomalyFilter narrows a listing of anomalies. A zero field matches everything.
+type AnomalyFilter struct {
+	Type     AnomalyType
+	Severity Severity
+	Status   AnomalyStatus
+	MeterID  string
+}
+
 // Anomaly is a stored finding. Breakdowns and evidence travel as JSON because
 // their shape belongs to the engine and they are always read whole.
 type Anomaly struct {
