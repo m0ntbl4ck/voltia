@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+bin
+voltia
+web/node_modules
+web/dist
+docs
+*.test
+*.out
