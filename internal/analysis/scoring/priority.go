@@ -9,10 +9,10 @@ import (
 
 // PriorityBreakdown shows where the points of a priority came from.
 type PriorityBreakdown struct {
-	Severity float64
-	Type     float64
-	Impact   float64
-	Recency  float64
+	Severity float64 `json:"severity"`
+	Type     float64 `json:"type"`
+	Impact   float64 `json:"impact"`
+	Recency  float64 `json:"recency"`
 }
 
 func (b PriorityBreakdown) Total() int {

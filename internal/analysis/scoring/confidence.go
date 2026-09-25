@@ -46,12 +46,12 @@ func DefaultConfidenceConfig() ConfidenceConfig {
 
 // ConfidenceBreakdown holds each component, from 0 to 1.
 type ConfidenceBreakdown struct {
-	DetectorAgreement     float64
-	SignalStrength        float64
-	ClassificationClarity float64
-	DataIntegrity         float64
+	DetectorAgreement     float64 `json:"detector_agreement"`
+	SignalStrength        float64 `json:"signal_strength"`
+	ClassificationClarity float64 `json:"classification_clarity"`
+	DataIntegrity         float64 `json:"data_integrity"`
 	// IntegrityApplies is false for data quality episodes, whose bad readings are the evidence itself.
-	IntegrityApplies bool
+	IntegrityApplies bool `json:"integrity_applies"`
 }
 
 func confidence(res classify.Result, cfg ConfidenceConfig) (float64, ConfidenceBreakdown) {
