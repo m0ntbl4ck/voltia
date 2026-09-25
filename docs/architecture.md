@@ -139,7 +139,7 @@ voltia/
 | Auth | JWT en cookie `HttpOnly; SameSite=Lax`, usuario demo con bcrypt |
 | LLM | SDK oficial `google.golang.org/genai` (Gemini) · `anthropic-sdk-go` (Claude) |
 | Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui · ECharts · TanStack Query · React Router |
-| Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo, `git-commit-master` y `git-ramas` (ver §11.1) |
+| Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo y `git-commit-master` (ver §11.1) |
 
 ---
 
@@ -455,13 +455,12 @@ CI (GitHub Actions): lint Go/TS → tests Go → build web → build imagen Dock
 
 ### 11.1 Skills obligatorias
 
-Tres skills se aplican al pie de la letra durante todo el proyecto. Ninguna se adapta, se resume ni se reemplaza por un paso manual. Si una instrucción del proyecto choca con una skill, se detiene el trabajo y se consulta al dueño del proyecto antes de seguir.
+Dos skills se aplican al pie de la letra durante todo el proyecto. Ninguna se adapta, se resume ni se reemplaza por un paso manual. Si una instrucción del proyecto choca con una skill, se detiene el trabajo y se consulta al dueño del proyecto antes de seguir.
 
 | Skill | Ámbito | Sección |
 |---|---|---|
 | antislop, con todas sus skills | Planificación, código, UI, textos y entrega | §11.2 |
 | `git-commit-master` | Cada commit, sin excepción | §11.3 |
-| `git-ramas` | Cada rama: feature, bugfix y hotfix | §11.4 |
 
 ### 11.2 antislop: todas sus skills, en todas las fases
 
@@ -505,17 +504,12 @@ Todo commit se crea con la skill `git-commit-master`. Nadie escribe mensajes de 
 | Seguridad | La skill cancela el commit si detecta secretos. Nunca se versionan `.env` ni `expected_results.csv` |
 | Tamaño | Si el diff pasa de 500 líneas, se divide en commits más atómicos |
 
-### 11.4 Ramas: `git-ramas`
+### 11.4 Ramas: trabajo directo en `main`
 
-Todas las ramas siguen los flujos de la skill `git-ramas`, paso por paso y sin saltarse ninguno.
+Voltia es un MVP para una prueba técnica, con un solo autor y cuatro días de plazo, así que no usa ramas de trabajo ni Pull Requests. La skill `git-ramas` no se aplica.
 
-- **Feature y bugfix:** la rama de trabajo sale de la release vigente (la `release/v*` de mayor versión). Al terminar se sube la rama, se crea la rama temporal `-dev`, se trae `dev` sobre ella y se sube solo esa rama temporal.
-- **Hotfix:** la rama sale de `main` y genera dos ramas temporales, `-dev` y `-release`, una por cada destino.
-- **Nomenclatura:** `feature/`, `bugfix/` o `hotfix/` más una descripción de 3 o 4 palabras.
-- **Pull Requests:** los abre el dueño del proyecto desde GitHub. Nunca se crean por comandos.
-- **Ramas protegidas:** nunca se hace push directo a `main`, `dev` ni a una `release/v*`.
+- **Dónde se trabaja:** los commits van directo a `main`, uno por cambio atómico y con `git-commit-master` (§11.3).
 - **Push:** se confirma con el dueño antes de cada `git push`.
-- **Conflictos:** si aparecen al integrar con `dev` o con la release, el proceso se detiene hasta que el dueño los revise.
 
 Repositorio: `github.com/m0ntbl4ck/voltia`.
 
