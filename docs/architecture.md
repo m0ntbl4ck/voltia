@@ -114,7 +114,7 @@ voltia/
 │   ├── domain/                    # Meter, Reading, Event, Anomaly, AnalysisRun, enums
 │   ├── analysis/                  # núcleo: motor puro y testeable
 │   │   ├── baseline/  detectors/  iforest/  classify/  scoring/
-│   │   └── engine.go              # orquesta las 7 etapas
+│   │   └── engine.go  types.go    # Run: las 5 etapas del motor (las otras 2 son del Explainer)
 │   ├── app/                       # casos de uso
 │   ├── ports/                     # interfaces
 │   ├── adapters/
@@ -139,7 +139,7 @@ voltia/
 | Auth | JWT en cookie `HttpOnly; SameSite=Lax`, usuario demo con bcrypt |
 | LLM | SDK oficial `google.golang.org/genai` (Gemini) · `anthropic-sdk-go` (Claude) |
 | Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui · ECharts · TanStack Query · React Router |
-| Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo, `git-commit-master` y `git-ramas` (ver §11.1) |
+| Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo y `git-commit-master` (ver §11.1) |
 
 ---
 
@@ -150,6 +150,8 @@ voltia/
 ```
 Lecturas → Baseline → Detección → Correlación → Eventos → Explicación → Recomendación
 ```
+
+El motor (`analysis.Run`) hace las cinco primeras etapas y avisa con un callback cuando cada una empieza y termina. Las dos últimas las hace el Explainer de la sección 6, fuera del motor. En **Correlación** se agrupan las señales en episodios y el Isolation Forest los corrobora; en **Eventos** se clasifica cada episodio contra los eventos y se puntúa. `Run` acepta un contexto para cancelar, anota en `Failures` al medidor cuyo baseline no se pudo construir sin frenar a los demás, y se detiene si el bosque está mal configurado. Un análisis completo de los 12 medidores tarda unos 0,7 s.
 
 `POST /ai/analyze` crea un `analysis_run` (`PENDING`), responde **202** y lanza una goroutine que avanza etapa por etapa guardando progreso. El frontend hace **polling** (~800 ms) a `GET /ai/analysis/:id`. Cada etapa tiene una pausa visual mínima (~300 ms) para que el stepper sea legible en la demo.
 
@@ -183,41 +185,48 @@ sequenceDiagram
 ### 5.2 Baseline
 
 - **Perfil de 24 horas** por medidor y por variable (kWh, V, A, FP).
-- **Mediana + MAD** (robusto a paradas y picos). Z robusto: `z = (x − mediana) / (1,4826 · MAD)`.
-- **Piso de tolerancia:** la dispersión efectiva es como mínimo el 5% de la mediana (evita z enormes en medidores muy estables).
-- **Ventana de referencia** configurable (default: los primeros 7 días), **excluyendo** horas con eventos conocidos o que fallan el chequeo físico.
-- **Variación (KPI):** promedio diario de los **últimos 2 días** frente al baseline diario (suma del perfil horario).
+- **Mediana + MAD** (robusto a paradas y picos). Z robusto: `z = (x - mediana) / sigma`, con `sigma = max(1,4826 · MAD, piso · |mediana|)`.
+- **Piso de sigma por variable:** 5% de la mediana para consumo y corriente, 2% para el factor de potencia y 0,5% para el voltaje. Un piso único del 5% dejaba pasar un salto de 241 V con z = 1,9, porque el voltaje es mucho más estable que el consumo.
+- **Ventana de referencia** configurable (por defecto, 7 días desde la medianoche de la primera lectura de cada medidor). El análisis recorre solo las lecturas posteriores.
+- **Exclusión por eventos:** quedan fuera del baseline las lecturas cubiertas por un evento reportado de cualquier tipo salvo `UNKNOWN`. Duran lo que el evento declare en su descripción ("for N hours") o, si no declara nada, 24 h. El chequeo físico no excluye lecturas (ver D6). El bosque de D7 se entrena con las mismas lecturas.
+- **Variación (KPI):** promedio diario de los **últimos 2 días completos** frente al baseline diario (suma del perfil horario).
 - Se recalcula en cada análisis (no se persiste); la evidencia de cada anomalía guarda los valores usados.
 
 Ejemplo real (M-109): baseline diario ≈ **1.048 kWh**, reciente ≈ **2.201 kWh/día** → **+110%**.
 
 ### 5.3 Detectores (emiten señales con evidencia; no deciden el tipo)
 
-| # | Detector | Regla (umbrales configurables) |
+| # | Detector | Regla implementada (umbrales configurables) |
 |---|---|---|
-| D1 | Cambio persistente | ≥ 6 h consecutivas con \|z\| > 3 en el mismo sentido |
-| D2 | Spike / caída brusca | racha de 1 a 5 h con \|z\| > 4 que vuelve a lo normal |
-| D3 | Outlier | lectura aislada con \|z\| > 5 en cualquier variable |
-| D4 | Patrón horario anormal | correlación del perfil diario con el baseline < 0,8 o relación noche/día fuera de rango |
-| D5 | Relación eléctrica anómala | caída de FP > 0,1, corriente que sube más que el consumo, V baja con I alta |
-| D6 | Calidad de datos | coherencia física `kWh ≈ V·I·FP/1000` fuera de ±25%; V fuera de ±8% de 220 V con retorno inmediato; valores "de catálogo" repetidos; huecos/duplicados; rangos imposibles |
-| D7 | Isolation Forest | score multivariable sobre `[z_kWh, z_V, z_I, z_FP, log(ratio_físico)]`; semilla fija; atribución por variable (profundidad de corte). **Corrobora y alimenta la confianza; no decide tipo ni severidad** |
+| D1 | Cambio persistente | 6 h consecutivas o más con \|z\| > 3 del mismo lado, en cada una de las cuatro variables |
+| D2 | Pico o caída brusca | racha de 1 a 5 h de consumo con \|z\| > 4 cuya hora siguiente vuelve a \|z\| ≤ 3; una racha que llega a la última lectura no cuenta, porque no se sabe si vuelve |
+| D3 | Outlier | lectura con \|z\| > 5 en cualquier variable que ni D1 ni D2 ya expliquen, para no contar dos veces el mismo evento |
+| D4 | Patrón horario anormal | por día completo: correlación del día con el perfil del baseline < 0,8, o relación noche/día (noche de 22 a 6) a más del 20% de la del baseline. La correlación solo cuenta si el perfil tiene forma propia: la dispersión de sus 24 medianas debe ser al menos 1,5 veces el sigma típico. La señal cubre las horas del día con \|z\| > 3, o el día entero si ninguna lo supera |
+| D5 | Relación eléctrica anómala | factor de potencia a más de 0,1 por debajo de su mediana horaria durante 6 h o más |
+| D6 | Calidad de datos | saltos eléctricos aislados (\|z\| > 5 en V, I o FP con las dos horas vecinas en \|z\| ≤ 4 y el consumo en \|z\| ≤ 3), valores imposibles (FP ≤ 0 o > 1, V ≤ 0, I < 0, kWh < 0), marcas de tiempo duplicadas y huecos |
+| D7 | Isolation Forest | puntuación multivariable sobre `[z_kWh, z_V, z_I, z_FP, log(ratio_físico)]`, con atribución por variable. **Corrobora y alimenta la confianza; no decide tipo ni severidad** |
 
-Validación preliminar de D7 sobre el dataset (prototipo): M-109 score máx 0,79 (1.º), M-112 0,78, M-104 0,68, M-106 0,66; los 8 medidores sanos ≤ 0,56 con **0 lecturas > 0,6**.
+**Lo que no se implementó de la idea original.** D5 pedía también corriente que sube más que el consumo y voltaje que baja con corriente alta: en M-104 y M-109 la corriente y el consumo suben en la misma proporción, y no hay datos que respalden el resto. D6 pedía la coherencia física `kWh ≈ V·I·FP/1000` dentro de ±25%, pero esa relación varía hasta ±25% en medidores sanos y se desvía en M-109: marcaba 46 lecturas de M-109 y solo 13 de las 16 de M-112. Las reglas de voltaje fuera de ±8% de 220 V y de valores de catálogo repetidos quedan como trabajo futuro (sección 14).
+
+**D7 en detalle.** Se entrena por medidor con las lecturas de su semana de referencia, describe cada lectura contra el baseline de ese medidor y usa 500 árboles, muestra de 256 y semilla 7. Corrobora un episodio ya formado por los otros detectores cuando al menos el 30% de sus lecturas puntúa 0,6 o más. Nunca abre un episodio ni cambia el tipo, la severidad o la prioridad. La atribución acredita, en cada corte del camino de la lectura, ln(filas del nodo / filas del lado de la lectura) a la variable cortada, y normaliza los créditos a 1.
+
+Resultado medido en el dataset: puntuación máxima de unos 0,75 en M-109, 0,74 en M-112, 0,71 en M-104 y 0,70 en M-106, tanto con la implementación en Go como con una independiente en numpy. Los medidores sanos no quedan por debajo de 0,6 como sugería el prototipo: hasta 9 de sus 168 horas de análisis lo pasan, con máximos entre 0,61 y 0,71. Por eso corrobora por proporción de horas y no por una sola. En pruebas con datos sintéticos, un valor extremo en una sola variable puntúa poco (0,50 frente a 0,38 en el centro de los datos): de eso se encarga D3.
 
 ### 5.4 Episodios y clasificación
 
-**Episodio:** señales del mismo medidor solapadas o a < 6 h entre sí → **una anomalía** (inicio, fin/en curso, variables afectadas, evidencia).
+**Episodio:** señales del mismo medidor solapadas o a < 6 h entre sí → **una anomalía** (inicio, fin/en curso, variables afectadas, evidencia). D7 no forma episodios: se suma a los que ya existen.
 
 **Árbol de decisión (determinista):**
 
 ```
-1. ¿La mayoría de lecturas del episodio fallan D6?           → DATA_QUALITY
+1. ¿Hay señales D6 y ningún cambio persistente (D1 o D5)?   → DATA_QUALITY
 2. ¿Hay evento EXPLICATIVO compatible (mismo medidor, ±6 h del inicio, dirección coherente)?
-     a. SCHEDULED_OUTAGE + caída + duración ≤ evento (+margen) → FALSE_POSITIVE
+     a. SCHEDULED_OUTAGE + caída + duración ≤ evento (+1 h)   → FALSE_POSITIVE
      b. OPERATIONAL_CHANGE + aumento                          → EXPLAINABLE_ANOMALY
 3. Sin evento explicativo                                     → REAL_ANOMALY
 ```
+
+La regla 1 no exige que la mayoría de las lecturas fallen D6: M-112 tiene 16 lecturas raras en 46 horas (35%) y esa versión lo dejaba fuera. La duración de una parada se lee del texto del evento ("for N hours"); si el evento no la declara, no se comprueba.
 
 **Reglas de seguridad:**
 1. Un evento `UNKNOWN` **nunca** explica nada (M-109 tiene uno: *"No operational event reported"*).
@@ -233,28 +242,41 @@ Validación preliminar de D7 sobre el dataset (prototipo): M-109 score máx 0,79
 | `EXPLAINABLE_ANOMALY` | no aplica | variación ≥ 20% | < 20% |
 | `FALSE_POSITIVE` | no aplica | no aplica | siempre |
 
+La variación es el cambio del tramo de consumo más largo del episodio frente a su baseline, en valor absoluto. No es el KPI de los últimos 2 días.
+
 ### 5.6 Prioridad (0 a 100, para ordenar)
 
 ```
 prioridad = severidad (HIGH 50 · MEDIUM 25 · LOW 5)
           + tipo      (REAL 25 · DATA_QUALITY 15 · EXPLAINABLE 5 · FP 0)
-          + impacto   (0 a 15, proporcional a kWh en exceso)
+          + impacto   (15 · mín(1, kWh en exceso / 2.500))
           + vigencia  (+10 si sigue en curso)
 ```
+
+El exceso suma (observado - esperado) · horas de los tramos de consumo al alza, y el total se redondea con tope en 100. M-109 satura el impacto con 2.825 kWh de exceso y M-104 obtiene 13 de 15 puntos con 2.178. El episodio de M-112 termina el 14-sep a las 21:00 y los datos llegan hasta las 23:00, así que no cuenta como en curso: su prioridad es 65 y no 75.
 
 ### 5.7 Confianza
 
 Índice de **solidez de la evidencia** (no es una probabilidad calibrada: no hay datos etiquetados disponibles).
 
-| Componente | Peso | Mide |
+| Componente | Peso | Cómo se calcula |
 |---|---|---|
-| Coincidencia de detectores | 35% | detectores independientes que coinciden (incluye D7) |
-| Fuerza de la señal | 30% | magnitud del z y horas de persistencia |
-| Claridad de clasificación | 25% | qué tan limpia fue la decisión de tipo (ajuste del evento, ausencia de eventos, % de lecturas incoherentes) |
-| Integridad de datos | 10% | % de lecturas válidas (no aplica a `DATA_QUALITY`) |
+| Coincidencia de detectores | 35% | fuentes = tipos distintos de señal (D7 incluido), más una si un cambio persistente aparece en 2 o más variables; valor = mín(1, 0,5 + 0,25 · (fuentes - 1)) |
+| Fuerza de la señal | 30% | promedio de mín(1, \|z\| máximo / 8) y mín(1, horas / 12); D7 no cuenta aquí porque no tiene z |
+| Claridad de clasificación | 25% | según el tipo, como se detalla abajo |
+| Integridad de datos | 10% | 1 - horas inválidas / duración del episodio; no aplica a `DATA_QUALITY`, y en ese caso los otros pesos se renormalizan |
+
+Claridad de la clasificación:
+
+- `DATA_QUALITY`: 1 si un evento `DATA_QUALITY` lo corrobora, 0,75 si no.
+- `FALSE_POSITIVE`: 0,5 · alineación + 0,5 · ajuste de duración. La alineación es 1 - \|desfase\| / 6 h; el ajuste es 1 - \|duración del episodio - duración del evento\| / duración del evento, y vale 0,7 si el evento no declara duración. Sin evento explicativo, 0,5.
+- `EXPLAINABLE_ANOMALY`: 0,6 · alineación + 0,4.
+- `REAL_ANOMALY`: 1 sin eventos cercanos, 0,95 con eventos que no explican, 0,9 con un evento incompatible y 0,8 cuando la evidencia eléctrica anula un evento explicativo.
 
 Acotado a **[0,50 a 0,99]**. Bandas: Alta ≥ 0,85 · Media/Alta 0,75 a 0,85 · Media 0,60 a 0,75 · Baja < 0,60.
-KPI agregado: promedio **ponderado por severidad** de las anomalías del último análisis.
+KPI agregado: promedio **ponderado por severidad** (HIGH 3, MEDIUM 2, LOW 1) de las anomalías del último análisis.
+
+Las fórmulas internas de cada componente son de esta implementación: el diseño original fijaba los pesos y no cómo se calcula cada uno. Con tres fuentes la coincidencia ya llega a 1, así que con D7 M-104, M-106 y M-112 quedan en el techo (ver sección 14).
 
 ### 5.8 Estado del medidor (derivado, no persistido)
 
@@ -264,13 +286,15 @@ KPI agregado: promedio **ponderado por severidad** de las anomalías del último
 
 ### 5.9 Resultado esperado sobre el dataset (verificado por test de regresión)
 
-| Medidor | Evidencia principal | Tipo | Severidad | Estado |
-|---|---|---|---|---|
-| **M-109** | +110% desde 12-sep 14:00, I ×2, FP 0,94 → 0,73, sin evento explicativo | `REAL_ANOMALY` | HIGH · **prioridad #1** | Critical |
-| **M-112** | kWh estable; 16 lecturas desde 13-sep con V 202/240 y FP 0,58/0,72/0,98 físicamente incoherentes | `DATA_QUALITY` | HIGH | Alert |
-| **M-104** | +47% desde 11-sep, FP estable, coincide con nueva línea productiva | `EXPLAINABLE_ANOMALY` | MEDIUM | Alert |
-| **M-106** | caída de 12 h el 8-sep, coincide exactamente con parada programada | `FALSE_POSITIVE` | LOW | OK |
-| Resto (8) | sin desviaciones | no aplica | no aplica | OK |
+| Medidor | Evidencia principal | Tipo | Severidad | Prioridad | Confianza |
+|---|---|---|---|---|---|
+| **M-109** | +110% desde 12-sep 14:00, I ×2, FP 0,94 → 0,73, sin evento explicativo | `REAL_ANOMALY` | HIGH | **100 (#1)** | 0,99 |
+| **M-112** | kWh estable; 16 lecturas desde 13-sep con V 202/240 y FP 0,58/0,72/0,98 físicamente incoherentes | `DATA_QUALITY` | HIGH | 65 | 0,99 |
+| **M-104** | +47% desde 11-sep, FP estable, coincide con nueva línea productiva | `EXPLAINABLE_ANOMALY` | MEDIUM | 53 | 0,99 |
+| **M-106** | caída de 12 h el 8-sep, coincide exactamente con parada programada | `FALSE_POSITIVE` | LOW | 5 | 0,99 |
+| Resto (8) | sin desviaciones | no aplica | no aplica | no aplica | no aplica |
+
+Confianza agregada: 0,989. El estado del medidor (5.8) todavía no está implementado.
 
 > Estos asserts se derivan de la tabla pública de la sección 9 del reto, no de `expected_results.csv`.
 
@@ -431,13 +455,12 @@ CI (GitHub Actions): lint Go/TS → tests Go → build web → build imagen Dock
 
 ### 11.1 Skills obligatorias
 
-Tres skills se aplican al pie de la letra durante todo el proyecto. Ninguna se adapta, se resume ni se reemplaza por un paso manual. Si una instrucción del proyecto choca con una skill, se detiene el trabajo y se consulta al dueño del proyecto antes de seguir.
+Dos skills se aplican al pie de la letra durante todo el proyecto. Ninguna se adapta, se resume ni se reemplaza por un paso manual. Si una instrucción del proyecto choca con una skill, se detiene el trabajo y se consulta al dueño del proyecto antes de seguir.
 
 | Skill | Ámbito | Sección |
 |---|---|---|
 | antislop, con todas sus skills | Planificación, código, UI, textos y entrega | §11.2 |
 | `git-commit-master` | Cada commit, sin excepción | §11.3 |
-| `git-ramas` | Cada rama: feature, bugfix y hotfix | §11.4 |
 
 ### 11.2 antislop: todas sus skills, en todas las fases
 
@@ -481,17 +504,12 @@ Todo commit se crea con la skill `git-commit-master`. Nadie escribe mensajes de 
 | Seguridad | La skill cancela el commit si detecta secretos. Nunca se versionan `.env` ni `expected_results.csv` |
 | Tamaño | Si el diff pasa de 500 líneas, se divide en commits más atómicos |
 
-### 11.4 Ramas: `git-ramas`
+### 11.4 Ramas: trabajo directo en `main`
 
-Todas las ramas siguen los flujos de la skill `git-ramas`, paso por paso y sin saltarse ninguno.
+Voltia es un MVP para una prueba técnica, con un solo autor y cuatro días de plazo, así que no usa ramas de trabajo ni Pull Requests. La skill `git-ramas` no se aplica.
 
-- **Feature y bugfix:** la rama de trabajo sale de la release vigente (la `release/v*` de mayor versión). Al terminar se sube la rama, se crea la rama temporal `-dev`, se trae `dev` sobre ella y se sube solo esa rama temporal.
-- **Hotfix:** la rama sale de `main` y genera dos ramas temporales, `-dev` y `-release`, una por cada destino.
-- **Nomenclatura:** `feature/`, `bugfix/` o `hotfix/` más una descripción de 3 o 4 palabras.
-- **Pull Requests:** los abre el dueño del proyecto desde GitHub. Nunca se crean por comandos.
-- **Ramas protegidas:** nunca se hace push directo a `main`, `dev` ni a una `release/v*`.
+- **Dónde se trabaja:** los commits van directo a `main`, uno por cambio atómico y con `git-commit-master` (§11.3).
 - **Push:** se confirma con el dueño antes de cada `git push`.
-- **Conflictos:** si aparecen al integrar con `dev` o con la release, el proceso se detiene hasta que el dueño los revise.
 
 Repositorio: `github.com/m0ntbl4ck/voltia`.
 
@@ -530,6 +548,10 @@ Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria c
 ## 14. Limitaciones conocidas y trabajo futuro
 
 - La confianza es un índice de solidez de evidencia, **no una probabilidad calibrada** (sin datos etiquetados).
+- La coincidencia de detectores llega al máximo con tres fuentes: con D7, M-104, M-106 y M-112 quedan idénticos en 0,99 y se pierde la diferencia entre ellos. Falta decidir una escala menos empinada (por ejemplo 0,5 + 0,15 por fuente).
+- D5 y D6 implementan un subconjunto de las reglas pensadas (sección 5.3). Quedan como trabajo futuro la corriente que sube más que el consumo, el voltaje que baja con corriente alta, el voltaje fuera de ±8% de 220 V y los valores de catálogo repetidos.
+- Los eventos que no declaran duración excluyen 24 h del baseline. Es un valor sin respaldo en los datos.
+- Los umbrales de D4 (20%, noche de 22 a 6, forma mínima 1,5) y de D7 (0,6, 30% de las horas) se midieron sobre 12 medidores y 14 días.
 - Baseline con solo 7 días de referencia: no separa días laborales de fines de semana.
 - Umbrales ajustados a un dataset pequeño; en producción se calibrarían con historial y feedback de operadores (las acciones DISMISS/RESOLVE son la semilla de ese feedback).
 - Análisis en proceso (goroutine); a escala se movería a una cola/worker.
