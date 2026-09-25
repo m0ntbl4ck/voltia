@@ -1,0 +1,1126 @@
+openapi: 3.0.3
+info:
+  title: Voltia API
+  version: 0.1.0
+  description: |
+    API de Voltia: lecturas de medidores eléctricos convertidas en decisiones operativas.
+
+    El motor analítico decide el tipo, la severidad, la prioridad y la confianza de cada anomalía.
+    El texto que las explica sale de plantillas o de un modelo de lenguaje, y solo puede usar cifras de la evidencia.
+
+    Todo bajo `/api/v1` menos el login y el logout pide la cookie de sesión `voltia_session`, que se obtiene en `POST /auth/login`.
+    Las fechas van en ISO 8601 UTC, los nombres en snake_case y los errores en RFC 7807 (`application/problem+json`).
+servers:
+  - url: /api/v1
+security:
+  - cookieAuth: []
+tags:
+  - name: auth
+  - name: dashboard
+  - name: meters
+  - name: anomalies
+  - name: analysis
+  - name: health
+
+paths:
+  /healthz:
+    servers:
+      - url: /
+    get:
+      tags: [health]
+      summary: Estado del servidor
+      security: []
+      responses:
+        "200":
+          description: El servidor responde.
+          content:
+            text/plain:
+              schema:
+                type: string
+                enum: [ok]
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión
+      description: Devuelve el usuario y deja la sesión en una cookie `HttpOnly` con `SameSite=Lax`, `Secure` detrás de HTTPS.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Credentials"
+      responses:
+        "200":
+          description: Sesión iniciada.
+          headers:
+            Set-Cookie:
+              description: Cookie `voltia_session` con el token firmado.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Cerrar sesión
+      description: Expira la cookie. No exige sesión.
+      security: []
+      responses:
+        "204":
+          description: Cookie expirada.
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Usuario de la sesión
+      responses:
+        "200":
+          description: El usuario actual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /dashboard/summary:
+    get:
+      tags: [dashboard]
+      summary: Resumen del dashboard
+      description: Los KPIs, el consumo de la planta día a día, el último análisis completado y las tres anomalías abiertas que más urgen.
+      responses:
+        "200":
+          description: El resumen.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /meters:
+    get:
+      tags: [meters]
+      summary: Listar medidores
+      description: El estado de cada medidor se deriva de sus anomalías sin resolver y no se guarda.
+      parameters:
+        - name: status
+          in: query
+          description: Estados separados por coma.
+          schema:
+            type: string
+            example: alert,critical
+        - name: q
+          in: query
+          description: Texto que debe aparecer en el código, el nombre o la ubicación, sin distinguir mayúsculas.
+          schema:
+            type: string
+            maxLength: 100
+        - name: sort
+          in: query
+          description: Sin valor, ordena por código.
+          schema:
+            type: string
+            enum: [consumption, variation, severity]
+        - name: order
+          in: query
+          description: Por defecto descendente con `sort` y ascendente por código.
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        "200":
+          description: Los medidores.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Meter"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /meters/{meter_id}:
+    parameters:
+      - $ref: "#/components/parameters/MeterID"
+    get:
+      tags: [meters]
+      summary: Detalle de un medidor
+      responses:
+        "200":
+          description: El medidor con sus niveles eléctricos y sus anomalías sin resolver.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeterDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /meters/{meter_id}/readings:
+    parameters:
+      - $ref: "#/components/parameters/MeterID"
+    get:
+      tags: [meters]
+      summary: Lecturas de un medidor
+      description: Una fecha sin hora es la medianoche en la zona horaria de la planta, y `to` no se incluye.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            example: "2026-09-10"
+        - name: to
+          in: query
+          schema:
+            type: string
+            example: "2026-09-12"
+        - name: resolution
+          in: query
+          description: Por defecto `hour`. Con `day` suma el consumo y promedia las variables eléctricas.
+          schema:
+            type: string
+            enum: [hour, day]
+        - name: include
+          in: query
+          description: Con `baseline` agrega la banda de comportamiento normal.
+          schema:
+            type: string
+            enum: [baseline]
+      responses:
+        "200":
+          description: La serie.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Series"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /meters/{meter_id}/events:
+    parameters:
+      - $ref: "#/components/parameters/MeterID"
+    get:
+      tags: [meters]
+      summary: Eventos de un medidor
+      responses:
+        "200":
+          description: Los eventos reportados, del más antiguo al más reciente.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Event"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /anomalies:
+    get:
+      tags: [anomalies]
+      summary: Listar anomalías
+      description: Ordenadas por prioridad, de mayor a menor, y luego por confianza.
+      parameters:
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/AnomalyType"
+        - name: severity
+          in: query
+          schema:
+            $ref: "#/components/schemas/Severity"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/AnomalyStatus"
+        - name: meter_id
+          in: query
+          schema:
+            type: string
+            maxLength: 32
+      responses:
+        "200":
+          description: Las anomalías.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Anomaly"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /anomalies/{id}:
+    parameters:
+      - $ref: "#/components/parameters/AnomalyID"
+    get:
+      tags: [anomalies]
+      summary: Detalle de una anomalía
+      responses:
+        "200":
+          description: La anomalía con su evidencia, sus desgloses y su historial.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnomalyDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /anomalies/{id}/actions:
+    parameters:
+      - $ref: "#/components/parameters/AnomalyID"
+    post:
+      tags: [anomalies]
+      summary: Aplicar una acción a una anomalía
+      description: |
+        Mueve la anomalía por su ciclo de vida y deja quién lo hizo en el historial.
+        Desde `OPEN` se puede crear una orden de inspección o pedir la validación del medidor (pasa a `ACKNOWLEDGED`),
+        confirmar la operación (`RESOLVED`) o descartarla (`DISMISSED`). Desde `ACKNOWLEDGED` solo se puede resolver.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActionRequest"
+      responses:
+        "200":
+          description: La anomalía ya con su nuevo estado y el historial.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnomalyDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: La acción no está permitida en el estado actual de la anomalía.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "415":
+          $ref: "#/components/responses/UnsupportedMediaType"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /ai/analyze:
+    post:
+      tags: [analysis]
+      summary: Iniciar un análisis
+      description: Responde de inmediato con el identificador. Si ya hay un análisis en curso devuelve el de ese, sin iniciar otro.
+      responses:
+        "202":
+          description: El análisis quedó en marcha.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [analysis_id]
+                properties:
+                  analysis_id:
+                    type: string
+                    format: uuid
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /ai/analysis/latest:
+    get:
+      tags: [analysis]
+      summary: Último análisis
+      responses:
+        "200":
+          description: El análisis que empezó más recientemente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /ai/analysis/{id}:
+    parameters:
+      - $ref: "#/components/parameters/AnalysisID"
+    get:
+      tags: [analysis]
+      summary: Estado de un análisis
+      description: La interfaz consulta este endpoint cada unos 800 ms mientras el análisis corre.
+      responses:
+        "200":
+          description: El análisis, con su etapa actual y su progreso.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: voltia_session
+
+  parameters:
+    MeterID:
+      name: meter_id
+      in: path
+      required: true
+      description: Código del medidor, como `M-109`.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,32}$"
+    AnomalyID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AnalysisID:
+      name: id
+      in: path
+      required: true
+      description: Identificador del análisis.
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Un parámetro o el cuerpo no es válido; el detalle dice cuál.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    Unauthorized:
+      description: Falta la sesión, es inválida o venció, o las credenciales no son correctas.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFound:
+      description: No existe lo que se pidió.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    UnsupportedMediaType:
+      description: El cuerpo debe enviarse como `application/json`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ServerError:
+      description: Falló algo del servidor. La causa se registra en el servidor y no se devuelve.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          enum: [about:blank]
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+
+    Credentials:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+        name:
+          type: string
+
+    MeterStatus:
+      type: string
+      enum: [ok, alert, critical]
+      description: "`critical` con una anomalía real de severidad alta sin resolver; `alert` con un problema de calidad de datos o una anomalía mediana o mayor que no sea falso positivo; `ok` en lo demás."
+
+    AnomalyType:
+      type: string
+      enum: [REAL_ANOMALY, EXPLAINABLE_ANOMALY, FALSE_POSITIVE, DATA_QUALITY]
+
+    Severity:
+      type: string
+      enum: [HIGH, MEDIUM, LOW]
+
+    AnomalyStatus:
+      type: string
+      enum: [OPEN, ACKNOWLEDGED, RESOLVED, DISMISSED]
+
+    Action:
+      type: string
+      enum: [CREATE_INSPECTION_ORDER, REQUEST_METER_VALIDATION, CONFIRM_OPERATION, DISMISS, RESOLVE]
+
+    ActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          $ref: "#/components/schemas/Action"
+        note:
+          type: string
+          maxLength: 500
+
+    DailyKWh:
+      type: object
+      additionalProperties: false
+      required: [date, kwh]
+      properties:
+        date:
+          type: string
+          example: "2026-09-14"
+        kwh:
+          type: number
+
+    Meter:
+      type: object
+      required:
+        [meter_id, name, location, status, has_baseline, recent_daily_kwh, baseline_daily_kwh, variation_pct,
+         last_reading_at, last_reading_status, open_anomalies, top_severity, daily]
+      properties:
+        meter_id:
+          type: string
+          example: M-109
+        name:
+          type: string
+        location:
+          type: string
+        status:
+          $ref: "#/components/schemas/MeterStatus"
+        has_baseline:
+          type: boolean
+          description: Falso si el medidor tiene muy pocas lecturas para aprender su comportamiento normal; entonces las cifras de consumo son cero.
+        recent_daily_kwh:
+          type: number
+          description: Promedio diario de los últimos dos días completos.
+        baseline_daily_kwh:
+          type: number
+          description: Consumo diario esperado, la suma de las medianas horarias.
+        variation_pct:
+          type: number
+        last_reading_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_reading_status:
+          type: string
+        open_anomalies:
+          type: integer
+          description: Anomalías abiertas o reconocidas.
+        top_severity:
+          allOf:
+            - $ref: "#/components/schemas/Severity"
+          nullable: true
+        daily:
+          type: array
+          description: Los últimos 14 días completos, para la gráfica pequeña.
+          items:
+            $ref: "#/components/schemas/DailyKWh"
+
+    Level:
+      type: object
+      additionalProperties: false
+      required: [recent, baseline]
+      properties:
+        recent:
+          type: number
+        baseline:
+          type: number
+
+    Electrical:
+      type: object
+      additionalProperties: false
+      required: [voltage_v, current_a, power_factor]
+      properties:
+        voltage_v:
+          $ref: "#/components/schemas/Level"
+        current_a:
+          $ref: "#/components/schemas/Level"
+        power_factor:
+          $ref: "#/components/schemas/Level"
+
+    MeterDetail:
+      allOf:
+        - $ref: "#/components/schemas/Meter"
+        - type: object
+          required: [electrical, anomalies]
+          properties:
+            electrical:
+              allOf:
+                - $ref: "#/components/schemas/Electrical"
+              nullable: true
+            anomalies:
+              type: array
+              items:
+                $ref: "#/components/schemas/Anomaly"
+
+    Point:
+      type: object
+      additionalProperties: false
+      required: [timestamp, consumption_kwh, voltage_v, current_a, power_factor, hours]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        consumption_kwh:
+          type: number
+        voltage_v:
+          type: number
+        current_a:
+          type: number
+        power_factor:
+          type: number
+        hours:
+          type: integer
+          description: Cuántas lecturas horarias suma el punto, 1 por hora y hasta 24 por día.
+
+    Band:
+      type: object
+      additionalProperties: false
+      required: [hour, median, sigma]
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        median:
+          type: number
+        sigma:
+          type: number
+
+    Baseline:
+      type: object
+      additionalProperties: false
+      required: [reference_start, reference_end, band_z, daily_kwh, profile]
+      properties:
+        reference_start:
+          type: string
+          format: date-time
+        reference_end:
+          type: string
+          format: date-time
+        band_z:
+          type: number
+          description: Ancho de la banda en desviaciones robustas, mediana ± band_z · sigma.
+        daily_kwh:
+          type: number
+        profile:
+          type: object
+          description: 24 bandas por variable, una por hora del día.
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/Band"
+
+    Series:
+      type: object
+      additionalProperties: false
+      required: [meter_id, resolution, points, baseline]
+      properties:
+        meter_id:
+          type: string
+        resolution:
+          type: string
+          enum: [hour, day]
+        points:
+          type: array
+          items:
+            $ref: "#/components/schemas/Point"
+        baseline:
+          allOf:
+            - $ref: "#/components/schemas/Baseline"
+          nullable: true
+          description: Solo con `include=baseline`, y nulo si el medidor no tiene baseline.
+
+    Event:
+      type: object
+      additionalProperties: false
+      required: [type, timestamp, description, duration_hours]
+      properties:
+        type:
+          type: string
+          enum: [OPERATIONAL_CHANGE, SCHEDULED_OUTAGE, DATA_QUALITY, UNKNOWN]
+        timestamp:
+          type: string
+          format: date-time
+        description:
+          type: string
+        duration_hours:
+          type: number
+          nullable: true
+
+    Anomaly:
+      type: object
+      required:
+        [meter_id, anomaly, type, severity, confidence, reason, recommended_action, id, meter_name, location, priority,
+         status, ongoing, episode_start, episode_end, detected_at, recommended_next_action, available_actions,
+         explanation_source, explanation_model]
+      properties:
+        meter_id:
+          type: string
+        anomaly:
+          type: string
+          description: Descripción de una línea.
+        type:
+          $ref: "#/components/schemas/AnomalyType"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Índice de solidez de la evidencia, no una probabilidad calibrada.
+        reason:
+          type: string
+        recommended_action:
+          type: string
+        id:
+          type: string
+          format: uuid
+        meter_name:
+          type: string
+        location:
+          type: string
+        priority:
+          type: integer
+          minimum: 0
+          maximum: 100
+        status:
+          $ref: "#/components/schemas/AnomalyStatus"
+        ongoing:
+          type: boolean
+        episode_start:
+          type: string
+          format: date-time
+        episode_end:
+          type: string
+          format: date-time
+        detected_at:
+          type: string
+          format: date-time
+        recommended_next_action:
+          allOf:
+            - $ref: "#/components/schemas/Action"
+          nullable: true
+          description: La acción que la plataforma recomienda; nula cuando la anomalía ya no está abierta.
+        available_actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Action"
+        explanation_source:
+          type: string
+          enum: [TEMPLATE, LLM]
+        explanation_model:
+          type: string
+          description: Vacío cuando el texto sale de una plantilla.
+
+    Signal:
+      type: object
+      additionalProperties: false
+      required: [kind, variable, start, end, hours, direction, observed, expected, mean_z]
+      properties:
+        kind:
+          type: string
+        check:
+          type: string
+        variable:
+          type: string
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        hours:
+          type: integer
+        direction:
+          type: integer
+          enum: [-1, 0, 1]
+        observed:
+          type: number
+        expected:
+          type: number
+        mean_z:
+          type: number
+        metrics:
+          type: object
+          additionalProperties:
+            type: number
+        attribution:
+          type: object
+          additionalProperties:
+            type: number
+
+    EventEvidence:
+      type: object
+      additionalProperties: false
+      required: [type, timestamp, description, duration_hours, role, offset_hours]
+      properties:
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        description:
+          type: string
+        duration_hours:
+          type: number
+        role:
+          type: string
+          enum: [EXPLAINS, CORROBORATES, NOT_EXPLANATORY, INCOMPATIBLE, CONTRADICTED_BY_ELECTRICAL]
+        offset_hours:
+          type: number
+
+    Evidence:
+      type: object
+      additionalProperties: false
+      required:
+        [meter_id, meter_name, location, type, severity, rule, confidence, episode_start, episode_end, duration_hours,
+         ongoing, direction, variation_pct, excess_kwh, invalid_readings, signals, events]
+      properties:
+        meter_id:
+          type: string
+        meter_name:
+          type: string
+        location:
+          type: string
+        type:
+          $ref: "#/components/schemas/AnomalyType"
+        severity:
+          $ref: "#/components/schemas/Severity"
+        rule:
+          type: string
+        confidence:
+          type: number
+        episode_start:
+          type: string
+          format: date-time
+        episode_end:
+          type: string
+          format: date-time
+        duration_hours:
+          type: integer
+        ongoing:
+          type: boolean
+        direction:
+          type: string
+          enum: [UP, DOWN, NONE]
+        variation_pct:
+          type: number
+        excess_kwh:
+          type: number
+        invalid_readings:
+          type: integer
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Signal"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventEvidence"
+
+    ActionEntry:
+      type: object
+      additionalProperties: false
+      required: [id, action, note, from_status, to_status, user_name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          $ref: "#/components/schemas/Action"
+        note:
+          type: string
+        from_status:
+          $ref: "#/components/schemas/AnomalyStatus"
+        to_status:
+          $ref: "#/components/schemas/AnomalyStatus"
+        user_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AnomalyDetail:
+      allOf:
+        - $ref: "#/components/schemas/Anomaly"
+        - type: object
+          required: [investigation_steps, evidence, confidence_breakdown, priority_breakdown, actions]
+          properties:
+            investigation_steps:
+              type: array
+              items:
+                type: string
+            evidence:
+              $ref: "#/components/schemas/Evidence"
+            confidence_breakdown:
+              type: object
+              description: Los cuatro componentes de la confianza.
+              additionalProperties: false
+              required: [detector_agreement, signal_strength, classification_clarity, data_integrity, integrity_applies]
+              properties:
+                detector_agreement:
+                  type: number
+                signal_strength:
+                  type: number
+                classification_clarity:
+                  type: number
+                data_integrity:
+                  type: number
+                integrity_applies:
+                  type: boolean
+            priority_breakdown:
+              type: object
+              description: De dónde salen los puntos de la prioridad.
+              additionalProperties: false
+              required: [severity, type, impact, recency]
+              properties:
+                severity:
+                  type: number
+                type:
+                  type: number
+                impact:
+                  type: number
+                recency:
+                  type: number
+            actions:
+              type: array
+              description: Historial, del más antiguo al más reciente.
+              items:
+                $ref: "#/components/schemas/ActionEntry"
+
+    Stage:
+      type: object
+      additionalProperties: false
+      required: [name, status]
+      properties:
+        name:
+          type: string
+          enum: [READINGS, BASELINE, DETECTION, CORRELATION, EVENTS, EXPLANATION, RECOMMENDATION]
+        status:
+          type: string
+          enum: [PENDING, RUNNING, DONE]
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+
+    MeterFailure:
+      type: object
+      additionalProperties: false
+      required: [meter_id, error]
+      properties:
+        meter_id:
+          type: string
+        error:
+          type: string
+
+    RunSummary:
+      type: object
+      additionalProperties: false
+      required: [anomalies, by_type, by_severity, confidence, failures]
+      properties:
+        anomalies:
+          type: integer
+        by_type:
+          type: object
+          additionalProperties:
+            type: integer
+        by_severity:
+          type: object
+          additionalProperties:
+            type: integer
+        confidence:
+          type: number
+          description: Promedio de la confianza ponderado por severidad.
+        failures:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeterFailure"
+        error:
+          type: string
+          description: Solo en un análisis fallido.
+
+    Run:
+      type: object
+      additionalProperties: false
+      required: [id, status, current_stage, progress, stages, summary, started_at, finished_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, RUNNING, COMPLETED, FAILED]
+        current_stage:
+          type: string
+        progress:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Proporción de etapas terminadas.
+        stages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Stage"
+        summary:
+          allOf:
+            - $ref: "#/components/schemas/RunSummary"
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Dashboard:
+      type: object
+      additionalProperties: false
+      required: [has_analysis, last_analysis, kpis, period, attention]
+      properties:
+        has_analysis:
+          type: boolean
+          description: Falso hasta que un análisis termina; entonces la pantalla invita a ejecutar uno.
+        last_analysis:
+          allOf:
+            - $ref: "#/components/schemas/Run"
+          nullable: true
+        kpis:
+          type: object
+          additionalProperties: false
+          required:
+            [meters, period_consumption_kwh, variation_pct, unresolved_anomalies, pending_high_priority, confidence]
+          properties:
+            meters:
+              type: object
+              additionalProperties: false
+              required: [total, ok, alert, critical]
+              properties:
+                total:
+                  type: integer
+                ok:
+                  type: integer
+                alert:
+                  type: integer
+                critical:
+                  type: integer
+            period_consumption_kwh:
+              type: number
+            variation_pct:
+              type: number
+              description: Consumo diario reciente de la planta frente a su baseline.
+            unresolved_anomalies:
+              type: integer
+              description: Abiertas y reconocidas.
+            pending_high_priority:
+              type: integer
+              description: Abiertas de severidad alta, las que nadie ha atendido todavía.
+            confidence:
+              type: number
+              nullable: true
+        period:
+          type: object
+          additionalProperties: false
+          required: [from, to, daily]
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+            daily:
+              type: array
+              items:
+                $ref: "#/components/schemas/DailyKWh"
+        attention:
+          type: array
+          items:
+            $ref: "#/components/schemas/Anomaly"
