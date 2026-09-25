@@ -1,10 +1,13 @@
-.PHONY: db db-down dev-api dev-web build test lint
+.PHONY: db db-down sqlc dev-api dev-web build test lint
 
 db:
 	docker compose up -d --wait postgres
 
 db-down:
 	docker compose down
+
+sqlc:
+	go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1 generate
 
 dev-api:
 	go run ./cmd/voltia

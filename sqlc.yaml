@@ -1,0 +1,23 @@
+version: "2"
+sql:
+  - engine: postgresql
+    schema: internal/adapters/postgres/migrations
+    queries: internal/adapters/postgres/queries
+    gen:
+      go:
+        package: sqlcgen
+        out: internal/adapters/postgres/sqlcgen
+        sql_package: database/sql
+        overrides:
+          - db_type: uuid
+            go_type: string
+          - db_type: jsonb
+            go_type:
+              import: encoding/json
+              type: RawMessage
+          - db_type: jsonb
+            nullable: true
+            go_type:
+              import: encoding/json
+              type: RawMessage
+              pointer: true
