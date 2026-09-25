@@ -17,8 +17,8 @@ import (
 // sessionCookie holds the signed session token.
 const sessionCookie = "voltia_session"
 
-// maxLoginBody bounds the login request: an email and a password fit in far less.
-const maxLoginBody = 4 << 10
+// maxBody bounds the JSON bodies of the API: they are a few short fields.
+const maxBody = 4 << 10
 
 // Authenticator signs users in and turns a session token back into its user.
 type Authenticator interface {
@@ -96,7 +96,7 @@ func (a authResource) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var c credentials
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxLoginBody)).Decode(&c); err != nil {
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody)).Decode(&c); err != nil {
 		writeProblem(w, http.StatusBadRequest, "the body must be JSON with email and password")
 		return
 	}
