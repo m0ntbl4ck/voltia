@@ -151,7 +151,7 @@ voltia/
 Lecturas → Baseline → Detección → Correlación → Eventos → Explicación → Recomendación
 ```
 
-El motor (`analysis.Run`) hace las cinco primeras etapas y avisa con un callback cuando cada una empieza y termina. Las dos últimas las hace el Explainer de la sección 6, fuera del motor. En **Correlación** se agrupan las señales en episodios y el Isolation Forest los corrobora; en **Eventos** se clasifica cada episodio contra los eventos y se puntúa. `Run` acepta un contexto para cancelar, anota en `Failures` al medidor cuyo baseline no se pudo construir sin frenar a los demás, y se detiene si el bosque está mal configurado. Un análisis completo de los 12 medidores tarda unos 0,7 s.
+El motor (`analysis.Run`) hace las cinco primeras etapas y avisa con un callback cuando cada una empieza y termina. Las dos últimas las lleva el caso de uso `AnalysisService`, fuera del motor: **Explicación** llama al Explainer de la sección 6 por cada anomalía y **Recomendación** guarda las anomalías con su texto (upsert por fingerprint) y cierra la ejecución con su resumen. Si el Explainer falla, la ejecución queda `FAILED` con el error y no se guarda nada; al arrancar, las ejecuciones que quedaron activas se cierran como `FAILED`. En **Correlación** se agrupan las señales en episodios y el Isolation Forest los corrobora; en **Eventos** se clasifica cada episodio contra los eventos y se puntúa. `Run` acepta un contexto para cancelar, anota en `Failures` al medidor cuyo baseline no se pudo construir sin frenar a los demás, y se detiene si el bosque está mal configurado. Un análisis completo de los 12 medidores tarda unos 0,7 s.
 
 `POST /ai/analyze` crea un `analysis_run` (`PENDING`), responde **202** y lanza una goroutine que avanza etapa por etapa guardando progreso. El frontend hace **polling** (~800 ms) a `GET /ai/analysis/:id`. Cada etapa tiene una pausa visual mínima (~300 ms) para que el stepper sea legible en la demo.
 
@@ -337,16 +337,19 @@ erDiagram
 
     users { uuid id PK; text email UK; text password_hash; text name; timestamptz created_at }
     meters { uuid id PK; text meter_id UK; text name; text location; timestamptz created_at }
-    readings { bigint id PK; text meter_id FK; timestamptz ts; numeric consumption_kwh; numeric voltage_v; numeric current_a; numeric power_factor; text status }
+    readings { bigint id PK; text meter_id FK; timestamptz ts; float8 consumption_kwh; float8 voltage_v; float8 current_a; float8 power_factor; text status }
     events { uuid id PK; text meter_id FK; timestamptz ts; text type; text description }
     analysis_runs { uuid id PK; text status; text current_stage; jsonb stages; jsonb summary; jsonb params; timestamptz started_at; timestamptz finished_at }
-    anomalies { uuid id PK; text meter_id FK; text fingerprint UK; text type; text severity; numeric confidence; jsonb confidence_breakdown; int priority; jsonb priority_breakdown; timestamptz episode_start; timestamptz episode_end; bool ongoing; jsonb evidence; text reason; text recommended_action; jsonb investigation_steps; text explanation_source; text explanation_model; text status; timestamptz detected_at; uuid last_analysis_id }
+    anomalies { uuid id PK; text meter_id FK; text fingerprint UK; text type; text severity; float8 confidence; jsonb confidence_breakdown; int priority; jsonb priority_breakdown; timestamptz episode_start; timestamptz episode_end; bool ongoing; jsonb evidence; text reason; text summary; text recommended_action; jsonb investigation_steps; text explanation_source; text explanation_model; text status; timestamptz detected_at; uuid last_analysis_id }
     anomaly_actions { uuid id PK; uuid anomaly_id FK; uuid user_id FK; text action; text note; text from_status; text to_status; timestamptz created_at }
     explanation_cache { text evidence_hash PK; text provider; text model; jsonb payload; timestamptz created_at }
 ```
 
 **Decisiones:**
 - `readings`: `UNIQUE(meter_id, ts)` + índice `(meter_id, ts)`; seed idempotente con `ON CONFLICT DO NOTHING`.
+- Las medidas (lecturas y confianza) son `double precision`, no `numeric`: el dominio usa `float64` y con `numeric` sqlc genera `pgtype.Numeric`, que estorba.
+- `analysis_runs.status` toma `PENDING`, `RUNNING`, `COMPLETED` o `FAILED`; `events` es único por `(meter_id, ts, type)`; el resto de los vocabularios (tipo, severidad, estado, acción) van con `CHECK`.
+- `anomalies.summary` guarda la descripción de una línea que pide el campo `anomaly` del reto.
 - Evidencia y desgloses en **jsonb** (formas heterogéneas por detector; siempre se leen completos).
 - **Estado del medidor derivado** de anomalías abiertas (sin sincronización ni doble fuente de verdad).
 - **Baseline y señales crudas no se persisten**; quedan resumidos en `evidence`.
