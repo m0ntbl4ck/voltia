@@ -3,6 +3,7 @@ package ports
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
@@ -12,6 +13,20 @@ type Source interface {
 	Meters(ctx context.Context) ([]domain.Meter, error)
 	Readings(ctx context.Context) ([]domain.Reading, error)
 	Events(ctx context.Context) ([]domain.Event, error)
+}
+
+// MeterReader looks up one meter and its data without loading the rest.
+// Meter returns domain.ErrNotFound for an unknown meter.
+type MeterReader interface {
+	Meter(ctx context.Context, meterID string) (domain.Meter, error)
+	// MeterReadings lists the readings in [from, to), oldest first.
+	MeterReadings(ctx context.Context, meterID string, from, to time.Time) ([]domain.Reading, error)
+	MeterEvents(ctx context.Context, meterID string) ([]domain.Event, error)
+}
+
+// AnomalyReader lists stored anomalies, most urgent first.
+type AnomalyReader interface {
+	Anomalies(ctx context.Context, f domain.AnomalyFilter) ([]domain.Anomaly, error)
 }
 
 // Runs keeps the record of every analysis run. Lookups return

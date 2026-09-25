@@ -118,8 +118,10 @@ func mapAll[In, Out any](in []In, f func(In) Out) []Out {
 }
 
 var (
-	_ ports.Source    = (*Repository)(nil)
-	_ ports.Runs      = (*Repository)(nil)
-	_ ports.Anomalies = (*Repository)(nil)
-	_ ports.Users     = (*Repository)(nil)
+	_ ports.Source        = (*Repository)(nil)
+	_ ports.Runs          = (*Repository)(nil)
+	_ ports.Anomalies     = (*Repository)(nil)
+	_ ports.Users         = (*Repository)(nil)
+	_ ports.MeterReader   = (*Repository)(nil)
+	_ ports.AnomalyReader = (*Repository)(nil)
 )
