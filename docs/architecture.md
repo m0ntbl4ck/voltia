@@ -137,7 +137,7 @@ voltia/
 | HTTP | `chi` (idiomático, compatible con `net/http`, middlewares) |
 | Persistencia | PostgreSQL · `pgx` · `sqlc` · migraciones `goose` |
 | Auth | JWT en cookie `HttpOnly; SameSite=Lax`, usuario demo con bcrypt |
-| LLM | SDK oficial `google.golang.org/genai` (Gemini) · `anthropic-sdk-go` (Claude) |
+| LLM | Gemini por REST con `net/http` (ver ADR 0007) · Claude intercambiable, pendiente |
 | Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui · ECharts · TanStack Query · React Router |
 | Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo y `git-commit-master` (ver §11.1) |
 
