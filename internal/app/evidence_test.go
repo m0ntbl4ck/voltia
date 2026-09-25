@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,27 +15,42 @@ import (
 	"github.com/m0ntbl4ck/voltia/internal/domain"
 )
 
-// datasetRun runs the engine over the shipped dataset once for every test.
+var (
+	datasetOnce   sync.Once
+	datasetReport analysis.Report
+	datasetMeters map[string]domain.Meter
+	datasetErr    error
+)
+
+// datasetRun runs the engine over the shipped dataset once for all the tests.
 func datasetRun(t *testing.T) (analysis.Report, map[string]domain.Meter) {
 	t.Helper()
+	datasetOnce.Do(func() { datasetReport, datasetMeters, datasetErr = runDataset() })
+	if datasetErr != nil {
+		t.Fatal(datasetErr)
+	}
+	return datasetReport, datasetMeters
+}
+
+func runDataset() (analysis.Report, map[string]domain.Meter, error) {
 	loc, err := time.LoadLocation("America/Bogota")
 	if err != nil {
-		t.Fatal(err)
+		return analysis.Report{}, nil, err
 	}
 	ds, err := seed.Load(data.FS, loc)
 	if err != nil {
-		t.Fatal(err)
+		return analysis.Report{}, nil, err
 	}
 	report, err := analysis.Run(context.Background(),
 		analysis.Input{Readings: ds.Readings, Events: ds.Events}, analysis.DefaultConfig(), nil)
 	if err != nil {
-		t.Fatal(err)
+		return analysis.Report{}, nil, err
 	}
 	meters := map[string]domain.Meter{}
 	for _, m := range ds.Meters {
 		meters[m.MeterID] = m
 	}
-	return report, meters
+	return report, meters, nil
 }
 
 func TestBuildEvidenceForTheUnexplainedSurge(t *testing.T) {
