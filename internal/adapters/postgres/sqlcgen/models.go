@@ -43,6 +43,7 @@ type Anomaly struct {
 	Status              string
 	DetectedAt          time.Time
 	LastAnalysisID      string
+	Summary             string
 }
 
 type AnomalyAction struct {
