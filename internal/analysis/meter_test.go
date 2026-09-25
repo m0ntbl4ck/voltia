@@ -74,3 +74,32 @@ func TestMeterBaselineFailsWithoutReadings(t *testing.T) {
 		t.Error("expected an error for a meter with no readings")
 	}
 }
+
+func TestAnEventWithoutADurationExcludesTheConfiguredWindow(t *testing.T) {
+	readings := flatMeter("M-1", 10, 50)
+	events := []domain.Event{{
+		MeterID: "M-1", Type: domain.EventOperationalChange,
+		Timestamp: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC),
+	}}
+	cfg := DefaultConfig()
+	got, err := MeterBaseline("M-1", readings, events, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The default window is 24 hours, so every hour of that day is out, hour 20 included.
+	if n := got.Profiles[domain.Consumption][20].Samples; n != 6 {
+		t.Errorf("hour 20 has %d samples, want 6", n)
+	}
+
+	cfg.EventExclusion = 6 * time.Hour
+	short, err := MeterBaseline("M-1", readings, events, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := short.Profiles[domain.Consumption][20].Samples; n != 7 {
+		t.Errorf("with a 6 hour window hour 20 has %d samples, want 7", n)
+	}
+	if n := short.Profiles[domain.Consumption][3].Samples; n != 6 {
+		t.Errorf("with a 6 hour window hour 3 has %d samples, want 6", n)
+	}
+}
