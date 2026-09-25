@@ -28,6 +28,7 @@ type Deps struct {
 	Analysis  Starter
 	Runs      RunReader
 	Anomalies AnomalyStore
+	Meters    MeterAPI
 	Logger    *slog.Logger
 }
 
@@ -50,6 +51,7 @@ func NewRouter(d Deps) http.Handler {
 			auth.protected(r)
 			analysisResource{starter: d.Analysis, runs: d.Runs, log: log}.routes(r)
 			anomalyResource{store: d.Anomalies, log: log}.routes(r)
+			meterResource{api: d.Meters, log: log}.routes(r)
 		})
 	})
 	return r
