@@ -1,6 +1,6 @@
 # ADR 0008: SPA de React embebida en el binario; polling para el progreso
 
-Estado: aceptada. Fecha: 2026-09-25.
+Estado: aceptada en lo del polling. La parte de la SPA embebida la reemplaza el [ADR 0010](0010-frontend-en-repositorio-aparte.md). Fecha: 2026-09-25.
 
 ## Contexto
 

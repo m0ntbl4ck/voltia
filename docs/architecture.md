@@ -52,14 +52,13 @@ DATOS → ANÁLISIS → ANOMALÍA → EXPLICACIÓN → PRIORIZACIÓN → ACCIÓN
 
 ```mermaid
 flowchart LR
-    user([Operador / Evaluador]) -->|HTTPS · navegador| voltia
+    user([Operador / Evaluador]) -->|navegador| spa
+    spa[SPA React<br/>repo voltia-web] -->|fetch + cookie httpOnly| api
 
-    subgraph voltia[Voltia · un binario Go]
-        spa[SPA React<br/>embebida con go:embed]
+    subgraph voltia[Voltia · un binario Go, repo voltia]
         api[API REST /api/v1<br/>chi]
         engine[Motor de análisis<br/>Go puro]
         explainer[Explainer<br/>puerto LLM]
-        spa -->|fetch + cookie httpOnly| api
         api --> engine
         engine --> explainer
     end
@@ -71,7 +70,7 @@ flowchart LR
     csv[/data/*.csv/] -->|seed al arrancar| db
 ```
 
-**Despliegue local (`docker-compose.yml`):** 2 servicios: `voltia` (imagen multi-stage: build Node → build Go → distroless) y `postgres`. En desarrollo, Vite corre aparte con proxy a la API.
+**Despliegue local (`docker-compose.yml`):** 2 servicios: `voltia` (imagen multi-stage: build Go → distroless) y `postgres`. La interfaz es otro repositorio (`voltia-web`), no se dockeriza y corre con Vite y su proxy a la API (ADR 0010).
 
 ---
 
@@ -123,7 +122,6 @@ voltia/
 │   │   ├── llm/                   # gemini/, anthropic/, template/, guard.go
 │   │   └── seed/                  # CSV + meters.yaml
 │   └── config/
-├── web/                           # React + Vite + TS
 ├── data/                          # readings.csv, events.csv
 ├── api/openapi.yaml
 ├── docs/                          # architecture.md, analysis-engine.md, adr/
@@ -138,7 +136,7 @@ voltia/
 | Persistencia | PostgreSQL · `pgx` · `sqlc` · migraciones `goose` |
 | Auth | JWT en cookie `HttpOnly; SameSite=Lax`, usuario demo con bcrypt |
 | LLM | Gemini por REST con `net/http` (ver ADR 0007) · Claude intercambiable, pendiente |
-| Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui · ECharts · TanStack Query · React Router |
+| Frontend | Repositorio aparte (`voltia-web`): React · Vite · TypeScript · CSS con tokens de `DESIGN.md` · ECharts · TanStack Query · React Router |
 | Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo y `git-commit-master` (ver §11.1) |
 
 ---
@@ -383,7 +381,7 @@ stateDiagram-v2
 
 ## 8. API REST
 
-Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807** (`application/problem+json`) · documentación en `api/openapi.yaml` + Swagger UI en `/api/docs`. Todo lo que no es `/api` sirve la SPA.
+Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807** (`application/problem+json`) · documentación en `api/openapi.yaml` + Swagger UI en `/api/docs`. La API no sirve la interfaz.
 
 | Método | Ruta | Descripción |
 |---|---|---|
@@ -408,6 +406,8 @@ Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807**
 
 ## 9. Frontend y UX
 
+> Vive en el repositorio `voltia-web`. Su dirección de diseño está en el `DESIGN.md` de ese repo y el resto de esta sección resume el acuerdo.
+
 **Dirección visual:** "centro de control" oscuro por defecto (con modo claro), acento ámbar eléctrico, colores semánticos consistentes (Critical rojo · Alert ámbar · OK verde · Calidad de datos violeta · Falso positivo gris). UI en **español (es-CO)**: `2.180 kWh`, `+103,7%`. El diseño y los textos siguen todas las skills de antislop (§11.2), a partir de un `DESIGN.md` del dueño del proyecto.
 
 **Layout:** sidebar (Dashboard · Medidores · Anomalías IA · Análisis · API docs) + topbar con búsqueda global y botón **▶ Run AI Analysis** siempre visible (abre panel lateral con stepper de 7 etapas).
@@ -431,7 +431,7 @@ Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807**
 - JWT firmado (HS256, `JWT_SECRET`), cookie `HttpOnly; SameSite=Lax` (y `Secure` fuera de local); middleware protege todo `/api/v1` excepto login y healthz.
 - Contraseña del usuario demo con bcrypt.
 - Secretos solo por variables de entorno (`.env` en `.gitignore`; `.env.example` documentado).
-- Sin CORS en producción (SPA embebida, mismo origen).
+- Sin CORS: en desarrollo el front llama a la API por el proxy de Vite (mismo origen). Si se despliega aparte, el hosting debe reescribir `/api` hacia el backend o se añade CORS con credenciales (ADR 0010).
 
 | Variable | Default | Uso |
 |---|---|---|
@@ -577,5 +577,6 @@ Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria c
 | 0005 | Detectores por reglas + Isolation Forest como corroborador |
 | 0006 | Clasificación por árbol con reglas de seguridad sobre eventos |
 | 0007 | Gemini 3.8 Flash como proveedor por defecto, Claude intercambiable |
-| 0008 | SPA React embebida en el binario; polling para el progreso |
+| 0008 | Polling para el progreso del análisis (la parte de la SPA embebida la reemplaza el 0010) |
+| 0010 | Frontend en un repositorio aparte; solo el backend se dockeriza |
 | 0009 | snake_case de punta a punta y RFC 7807 |

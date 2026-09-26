@@ -8,7 +8,7 @@ El motor analítico decide y el modelo de lenguaje solo redacta. Detección, cla
 
 El servidor está completo: motor, análisis asíncrono, autenticación, anomalías con su ciclo de acciones, medidores, dashboard y documentación OpenAPI.
 
-Falta la interfaz. Hoy `web/` es un marcador con el nombre del proyecto, y el servidor todavía no la sirve. Tampoco está el adaptador de Claude: `LLM_PROVIDER` acepta `gemini` o `template`. El adaptador de Gemini se probó contra un servidor local, no contra la API real.
+La interfaz vive en otro repositorio, `voltia-web` (React con Vite), y consume esta API. Aquí solo se dockeriza el servidor. Tampoco está el adaptador de Claude: `LLM_PROVIDER` acepta `gemini` o `template`. El adaptador de Gemini se probó contra un servidor local, no contra la API real.
 
 ## Arranque
 
@@ -94,13 +94,12 @@ Base `/api/v1`, JSON en snake_case, errores `application/problem+json`. Todo req
 
 ## Desarrollo local
 
-Requisitos: Go 1.27, Node 24 y Docker.
+Requisitos: Go 1.27 y Docker. Para la interfaz, ver `voltia-web`.
 
 ```sh
 cp .env.example .env
 make db        # solo PostgreSQL
 make dev-api   # servidor Go en :8080
-make dev-web   # Vite en :5173, con /api dirigido al servidor Go
 make test
 make lint
 make sqlc      # regenera el código de las consultas
@@ -119,7 +118,6 @@ internal/ports/      interfaces que el núcleo necesita del exterior
 internal/adapters/   http (chi), postgres (sqlc, goose), llm (Gemini, plantillas, guarda) y seed
 api/                 openapi.yaml y Swagger UI
 data/                readings.csv, events.csv y meters.yaml
-web/                 aplicación de Vite con React
 docs/                arquitectura y decisiones (adr/)
 ```
 
