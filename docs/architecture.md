@@ -53,9 +53,9 @@ DATOS → ANÁLISIS → ANOMALÍA → EXPLICACIÓN → PRIORIZACIÓN → ACCIÓN
 ```mermaid
 flowchart LR
     user([Operador / Evaluador]) -->|navegador| spa
-    spa[SPA React<br/>repo voltia-web] -->|fetch + cookie httpOnly| api
+    spa[SPA React<br/>repo voltia-web<br/>AWS Amplify] -->|/api reescrito + cookie httpOnly| api
 
-    subgraph voltia[VoltIA · un binario Go, repo voltia]
+    subgraph voltia[VoltIA · API en Go, repo voltia · EC2 con Caddy y Docker]
         api[API REST /api/v1<br/>chi]
         engine[Motor de análisis<br/>Go puro]
         explainer[Explainer<br/>puerto LLM]
@@ -69,6 +69,8 @@ flowchart LR
     explainer -.->|fallback / sin key| tpl[Plantillas]
     csv[/data/*.csv/] -->|seed al arrancar| db
 ```
+
+**Despliegue en AWS (ADR 0011):** una instancia EC2 corre `postgres`, la API y Caddy, que da el HTTPS. El frontend se aloja en Amplify y una regla reescribe `/api` hacia la instancia, así que el navegador ve un solo origen.
 
 **Despliegue local (`docker-compose.yml`):** 2 servicios: `voltia` (imagen multi-stage: build Go → distroless) y `postgres`. La interfaz es otro repositorio (`voltia-web`), no se dockeriza y corre con Vite y su proxy a la API (ADR 0010).
 
