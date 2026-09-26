@@ -1,7 +1,7 @@
 # VoltIA: documento de arquitectura
 
 > **AI Energy Management Platform**, MVP para la prueba técnica *Backend + Frontend + Data + IA*.
-> Estado: **aprobado** · Fecha: 2026-09-23 · Entrega: 2026-09-27
+> Estado: **aprobado** · Fecha: 2026-09-23 · Actualizado con lo construido: 2026-09-26 · Entrega: 2026-09-27
 
 ---
 
@@ -40,7 +40,9 @@ DATOS → ANÁLISIS → ANOMALÍA → EXPLICACIÓN → PRIORIZACIÓN → ACCIÓN
 |---|---|
 | Plazo | 4 días (24 a 27 sep 2026), 1 desarrollador, desarrollo asistido por IA |
 | Lenguaje backend | **Go** (requisito del reto) |
-| Ejecución | `docker compose up` (un comando). Deploy en nube: **fuera de alcance** de esta entrega |
+| Ejecución | `docker compose up` levanta la base y la API. El frontend corre aparte con `npm run dev` |
+| Repositorios | Dos: `voltia` (backend, documentación y despliegue) y `voltia-web` (frontend), por decisión del dueño (ADR 0010) |
+| Despliegue | **Hecho** en AWS: la API en una instancia EC2 con Caddy y el frontend en Amplify (ADR 0011). No hay CI ni entornos de prueba |
 | Demo | **Grabada**, 5 a 10 min |
 | Datos | `readings.csv` (4.032 lecturas, 12 medidores, 14 días, horarias) y `events.csv` (4 eventos) |
 | Ground truth | `expected_results.csv` **no existe en el sistema** (ni repo, ni seed, ni prompts) |
@@ -65,7 +67,7 @@ flowchart LR
 
     api <-->|pgx / sqlc| db[(PostgreSQL)]
     explainer -->|LLM_PROVIDER=gemini| gemini[[Gemini 3.8 Flash]]
-    explainer -.->|LLM_PROVIDER=anthropic| claude[[Claude API]]
+    explainer -.->|pendiente| claude[[Claude API]]
     explainer -.->|fallback / sin key| tpl[Plantillas]
     csv[/data/*.csv/] -->|seed al arrancar| db
 ```
@@ -85,7 +87,7 @@ flowchart TB
     subgraph adapters[adapters]
         http[http · chi handlers,<br/>middlewares, RFC 7807]
         pg[postgres · sqlc,<br/>migrations goose]
-        llm[llm · gemini / anthropic /<br/>template + guard]
+        llm[llm · gemini /<br/>template + guard]
         seed[seed · CSV + meters.yaml]
     end
     subgraph app[app · casos de uso]
@@ -121,7 +123,7 @@ voltia/
 │   ├── adapters/
 │   │   ├── http/                  # chi, handlers, auth JWT, errores RFC 7807
 │   │   ├── postgres/              # sqlc, queries/*.sql, migrations/
-│   │   ├── llm/                   # gemini/, anthropic/, template/, guard.go
+│   │   ├── llm/                   # gemini/, template/, guard.go
 │   │   └── seed/                  # CSV + meters.yaml
 │   └── config/
 ├── data/                          # readings.csv, events.csv
@@ -139,7 +141,7 @@ voltia/
 | Auth | JWT en cookie `HttpOnly; SameSite=Lax`, usuario demo con bcrypt |
 | LLM | Gemini por REST con `net/http` (ver ADR 0007) · Claude intercambiable, pendiente |
 | Frontend | Repositorio aparte (`voltia-web`): React · Vite · TypeScript · CSS con tokens de `DESIGN.md` · ECharts · TanStack Query · React Router |
-| Calidad | `golangci-lint` · ESLint + Prettier · GitHub Actions · Makefile · skills obligatorias: antislop completo y `git-commit-master` (ver §11.1) |
+| Calidad | `go vet` · `go test` · oxlint en el frontend · Makefile · skills obligatorias: antislop completo y `git-commit-master` (ver §11.1). No hay `golangci-lint` ni CI |
 
 ---
 
@@ -290,7 +292,7 @@ Las fórmulas internas de cada componente son de esta implementación: el diseñ
 
 | Medidor | Evidencia principal | Tipo | Severidad | Prioridad | Confianza |
 |---|---|---|---|---|---|
-| **M-109** | +110% desde 12-sep 14:00, I ×2, FP 0,94 → 0,73, sin evento explicativo | `REAL_ANOMALY` | HIGH | **100 (#1)** | 0,99 |
+| **M-109** | +110% desde 12-sep 14:00, I ×2, FP 0,94 → 0,74, sin evento explicativo | `REAL_ANOMALY` | HIGH | **100 (#1)** | 0,99 |
 | **M-112** | kWh estable; 16 lecturas desde 13-sep con V 202/240 y FP 0,58/0,72/0,98 físicamente incoherentes | `DATA_QUALITY` | HIGH | 65 | 0,99 |
 | **M-104** | +47% desde 11-sep, FP estable, coincide con nueva línea productiva | `EXPLAINABLE_ANOMALY` | MEDIUM | 53 | 0,99 |
 | **M-106** | caída de 12 h el 8-sep, coincide exactamente con parada programada | `FALSE_POSITIVE` | LOW | 5 | 0,99 |
@@ -309,8 +311,8 @@ Confianza agregada: 0,989. El estado del medidor (5.8) sale de estas anomalías:
 | Proveedor | Uso |
 |---|---|
 | `gemini` (default) | **Gemini 3.8 Flash**, capa gratuita de Google AI Studio (`GEMINI_API_KEY`) |
-| `anthropic` | API de Claude (`ANTHROPIC_API_KEY`), mismo prompt y esquema |
-| `template` | Plantillas deterministas; fallback automático sin key, ante error, timeout (~20 s) o cuota (429) |
+| `anthropic` | **No implementado.** El puerto lo admite, pero `LLM_PROVIDER` solo acepta `gemini` o `template` |
+| `template` | Plantillas deterministas; fallback automático sin key, ante error, timeout (30 s en total por explicación) o cuota agotada (429). Ante 429 y 5xx el cliente de Gemini reintenta hasta tres veces antes de caer a la plantilla |
 
 **Reglas de integración:**
 1. **Entrada:** solo el paquete de evidencia estructurada. Prompt: *usar únicamente esos datos; no cambiar tipo, severidad ni confianza; español para un operador de mantenimiento*.
@@ -430,18 +432,21 @@ Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807**
 
 ## 10. Seguridad y configuración
 
-- JWT firmado (HS256, `JWT_SECRET`), cookie `HttpOnly; SameSite=Lax` (y `Secure` fuera de local); middleware protege todo `/api/v1` excepto login y healthz.
+- JWT firmado (HS256, `JWT_SECRET`), cookie `HttpOnly; SameSite=Lax` (y `Secure` cuando la petición llega por HTTPS, directa o con `X-Forwarded-Proto`); middleware protege todo `/api/v1` excepto login y healthz.
 - Contraseña del usuario demo con bcrypt.
 - Secretos solo por variables de entorno (`.env` en `.gitignore`; `.env.example` documentado).
-- Sin CORS: en desarrollo el front llama a la API por el proxy de Vite (mismo origen). Si se despliega aparte, el hosting debe reescribir `/api` hacia el backend o se añade CORS con credenciales (ADR 0010).
+- Sin CORS: el navegador siempre ve un solo origen. En desarrollo lo da el proxy de Vite y en AWS la reescritura de `/api` de Amplify hacia la instancia (ADR 0010 y 0011). Pasar a CORS con credenciales exigiría `SameSite=None`, que Safari bloquea entre dominios distintos.
+- En AWS, la clave JWT, la contraseña de Postgres y la clave de Gemini viven cifradas en Parameter Store y la instancia las lee al arrancar. No hay puerto SSH abierto: el acceso es por Session Manager.
+- La cuenta demo (`demo@voltia.local`) es pública y su contraseña está en el repositorio.
 
 | Variable | Default | Uso |
 |---|---|---|
 | `DATABASE_URL` | compose | Postgres |
 | `JWT_SECRET` | sin valor por defecto | Firma de sesión |
-| `LLM_PROVIDER` | `gemini` | `gemini` · `anthropic` · `template` |
+| `LLM_PROVIDER` | `gemini` | `gemini` · `template` |
 | `LLM_MODEL` | `gemini-3.8-flash` | Modelo del proveedor |
-| `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` | vacío | Sin key → plantillas |
+| `GEMINI_API_KEY` | vacío | Sin key → plantillas |
+| `DEMO_EMAIL` / `DEMO_PASSWORD` | vacío | Cuenta que se crea al arrancar; van las dos o ninguna |
 | `PLANT_TZ` | `America/Bogota` | Zona de los CSV |
 | `ANALYSIS_*` | ver `config` | Umbrales, ventanas y pesos del motor |
 
@@ -454,11 +459,11 @@ Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807**
 | 1 (clave) | **Regresión sobre el dataset real**: los 4 casos + 8 sanos + inicio de episodio de M-109 | `go test` |
 | 2 | Unitarios del motor: baseline, D1 a D7, clasificador y reglas de seguridad, scoring, determinismo IF, guarda de números | `go test` table-driven |
 | 3 | API: códigos, filtros, auth, RFC 7807 | `httptest` + repos fake |
-| 3+ | 3 a 4 tests críticos contra Postgres real: filtros/orden, seed idempotente, dedupe por fingerprint | Testcontainers |
-| 4 | Utilidades y componentes clave del frontend | Vitest |
-| stretch | 1 smoke e2e del flujo de la demo, solo local | Playwright |
+| 3+ | Tests contra Postgres real en un esquema desechable: filtros y orden, seed idempotente, dedupe por fingerprint. Se saltan sin `DATABASE_URL` | `go test` con la base del compose |
+| 4 | Frontend: recorridos automáticos en Chrome de todas las pantallas (login, filtros, acciones, teclado, error con el servidor apagado, 375 px) y axe-core sin violaciones WCAG 2.2 AA en ambos temas. Son scripts fuera del repositorio, sin CI | puppeteer-core y axe-core |
+| No hecho | Vitest y Playwright dentro del repositorio | |
 
-CI (GitHub Actions): lint Go/TS → tests Go → build web → build imagen Docker. `Makefile`: `make up`, `make dev`, `make test`, `make lint`.
+No hay CI: las comprobaciones se corren a mano. `Makefile`: `make up`, `make dev-api`, `make test`, `make lint` (`go vet`; el lint del frontend está en `voltia-web`).
 
 ### 11.1 Skills obligatorias
 
@@ -513,7 +518,7 @@ Todo commit se crea con la skill `git-commit-master`. Nadie escribe mensajes de 
 
 ### 11.4 Ramas: trabajo directo en `main`
 
-VoltIA es un MVP para una prueba técnica, con un solo autor y cuatro días de plazo, así que no usa ramas de trabajo ni Pull Requests. La skill `git-ramas` no se aplica.
+VoltIA es un MVP para una prueba técnica, con un solo autor y cuatro días de plazo, repartido en dos repositorios, así que no usa ramas de trabajo ni Pull Requests. La skill `git-ramas` no se aplica.
 
 - **Dónde se trabaja:** los commits van directo a `main`, uno por cambio atómico y con `git-commit-master` (§11.3).
 - **Push:** se confirma con el dueño antes de cada `git push`.
@@ -524,31 +529,30 @@ Repositorio: `github.com/m0ntbl4ck/voltia`.
 
 ## 12. Plan de ejecución
 
-| Día | Meta | Entregable verificable |
+| Día | Meta | Lo que quedó hecho |
 |---|---|---|
 | **Jue 24** | El cerebro funciona | Scaffold, migraciones, seed, motor completo; **test de regresión en verde** |
-| **Vie 25** | La API y la IA hablan | API completa + OpenAPI; Explainer (plantillas → Gemini) + guarda + caché; Isolation Forest |
-| **Sáb 26** | VoltIA se ve como producto | Las 7 pantallas y el flujo de la demo completo con `docker compose up` |
-| **Dom 27** | Entrega | Pulido, tests restantes, adaptador Claude, README + ADRs, prueba en limpio sin key, **grabación de la demo** |
+| **Vie 25** | La API y la IA hablan | API completa + OpenAPI; Explainer (plantillas → Gemini) + guarda + caché; Isolation Forest; Dockerfile y compose; README y ADRs |
+| **Sáb 26** | VoltIA se ve como producto | Las 7 pantallas en `voltia-web` con `DESIGN.md`; separación en dos repositorios; Gemini probado con la API real, con reintentos y un prompt ajustado; despliegue en AWS (EC2 y Amplify); guion de la demo ensayado de punta a punta |
+| **Dom 27** | Entrega | Grabación de la demo y cierre. Al terminar la evaluación se apaga o se borra lo desplegado (`deploy/aws/README.md`) |
 
 Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria cierra con el Delivery Gate de antislop.
 
-**Orden de recorte si hay atraso:** Playwright → adaptador Claude → modo claro → Isolation Forest → D4.
-**Nunca se recortan:** test de regresión, flujo de la demo, fallback a plantillas, README.
+**Lo que se recortó por plazo:** el adaptador de Claude, Vitest y Playwright en el repositorio, la CI y `golangci-lint`.
+**Lo que no se recortó:** test de regresión, flujo de la demo, fallback a plantillas, README, modo claro e Isolation Forest.
 
 ---
 
-## 13. Guion de demo (grabada, 5 a 10 min)
+## 13. Demo (grabada, 5 a 10 min)
 
-1. **Login** como demo → dashboard vacío: "aún no hay análisis".
-2. **Contexto:** 12 medidores, 14 días; M-109 aparece con consumo alto en la tabla.
-3. **Detalle M-109:** la línea se sale de la banda de baseline el 12-sep 14:00; FP cae.
-4. **▶ Run AI Analysis:** stepper de 7 etapas → *"4 anomalías detectadas · 2 requieren atención prioritaria"*.
-5. **Anomalías IA:** M-109 (Real/High) primero; M-112 (Calidad/High); M-104 (Explicable/Medium); M-106 (Falso positivo/Low, no escalar).
-6. **Investigación M-109:** narrativa de Gemini, evidencia, desglose de confianza (0,96), evento UNKNOWN tratado como "sin explicación".
-7. **M-112 y M-106** en 30 s cada uno: por qué *no* son anomalías reales.
-8. **Acción:** "Crear orden de inspección" → el dashboard baja de 2 a 1 alta prioridad pendiente.
-9. **Cierre técnico:** arquitectura, `go test` de regresión en verde, Swagger.
+La demo corre sobre lo desplegado: la aplicación en Amplify, la API en AWS y la cuenta pública `demo@voltia.local`. Se preparan dos documentos:
+
+- [`docs/demo-guion.md`](demo-guion.md): las 10 escenas con su tiempo, lo que se hace en pantalla y lo que se cuenta. Se ensayó completo contra la aplicación desplegada y cada cifra coincide con la pantalla.
+- [`docs/demo-discurso.md`](demo-discurso.md): el texto hablado, de principio a fin: qué es la aplicación, la arquitectura y el recorrido de la demo.
+
+El recorrido: login y dashboard sin análisis, ejecutar el análisis (4 anomalías, 2 de severidad alta), dashboard y mapa de calor, detalle de M-109, investigación de M-109 con su texto de Gemini y sus desgloses, crear la orden de inspección (las altas pendientes bajan de 2 a 1), M-112 como calidad de datos, M-106 como falso positivo y cierre con la arquitectura.
+
+Antes de cada grabación se deja el estado limpio con `deploy/aws/reset-demo.sh`.
 
 ---
 
@@ -564,7 +568,13 @@ Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria c
 - Análisis en proceso (goroutine); a escala se movería a una cola/worker.
 - La huella (medidor, tipo, inicio del episodio) identifica una anomalía entre ejecuciones. Una anomalía resuelta o descartada que sigue ocurriendo en un análisis nuevo conserva su estado y no se reabre; y una que el análisis nuevo ya no detecta queda como estaba, sin cerrarse sola.
 - El baseline no se guarda: los endpoints de medidores lo reconstruyen en cada petición desde las lecturas. Con 12 medidores y 14 días es inmediato; a escala se guardaría con el análisis.
-- Futuro: deploy en nube, SSE para progreso, multi-tenant y roles, notificaciones, ingesta en streaming.
+- Despliegue de demostración: una sola instancia, sin copias de seguridad, sin límite de peticiones ni tiempos máximos de cabecera, y con una cuenta demo pública. Cualquiera que entre puede ejecutar análisis y aplicar acciones, y el estado es compartido. `reset-demo.sh` lo deja limpio.
+- El certificado HTTPS depende de `sslip.io`, un dominio compartido con límites de Let's Encrypt. Con un dominio propio desaparece ese riesgo.
+- Gemini usa la capa gratuita: la cuota se agota con las pruebas y a veces responde que está saturado. La caché de explicaciones evita repetir llamadas mientras la evidencia no cambie.
+- No hay historial de análisis: la API entrega solo el último.
+- No hay adaptador de Claude; el puerto lo admite.
+- No hay CI ni pruebas del frontend dentro del repositorio.
+- Futuro: dominio propio, SSE para progreso, multi-tenant y roles, notificaciones, ingesta en streaming.
 
 ---
 
@@ -580,5 +590,6 @@ Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria c
 | 0006 | Clasificación por árbol con reglas de seguridad sobre eventos |
 | 0007 | Gemini 3.8 Flash como proveedor por defecto, Claude intercambiable |
 | 0008 | Polling para el progreso del análisis (la parte de la SPA embebida la reemplaza el 0010) |
-| 0010 | Frontend en un repositorio aparte; solo el backend se dockeriza |
 | 0009 | snake_case de punta a punta y RFC 7807 |
+| 0010 | Frontend en un repositorio aparte; solo el backend se dockeriza |
+| 0011 | La API en una instancia EC2 con Docker Compose y Caddy, el frontend en Amplify |

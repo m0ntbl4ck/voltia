@@ -8,7 +8,11 @@ El motor analítico decide y el modelo de lenguaje solo redacta. Detección, cla
 
 El servidor está completo: motor, análisis asíncrono, autenticación, anomalías con su ciclo de acciones, medidores, dashboard y documentación OpenAPI.
 
-La interfaz vive en otro repositorio, [`voltia-web`](https://github.com/m0ntbl4ck/voltia-web) (React con Vite), y consume esta API. Aquí solo se dockeriza el servidor. Para verla: levanta el servidor con `docker compose up` y, en `voltia-web`, corre `npm install` y `npm run dev`. Tampoco está el adaptador de Claude: `LLM_PROVIDER` acepta `gemini` o `template`. El adaptador de Gemini se probó contra la API real el 26 de septiembre con `gemini-3.8-flash`: las tres explicaciones que llaman al modelo pasaron la guarda de números. Si Google responde que el modelo está saturado, el cliente reintenta hasta tres veces y, si sigue fallando, se usa la plantilla.
+La interfaz vive en otro repositorio, [`voltia-web`](https://github.com/m0ntbl4ck/voltia-web) (React con Vite), y consume esta API. Aquí solo se dockeriza el servidor. Para verla en local: levanta el servidor con `docker compose up` y, en `voltia-web`, corre `npm install` y `npm run dev`.
+
+Está desplegado en AWS: la API en una instancia EC2 con HTTPS y la interfaz en Amplify. La dirección se entrega aparte, junto con la cuenta de demostración `demo@voltia.local`. Es un despliegue de demostración y puede apagarse después de la evaluación. Los detalles están en [`deploy/aws`](deploy/aws) y en el [ADR 0011](docs/adr/0011-despliegue-en-una-instancia-ec2.md).
+
+Falta el adaptador de Claude: `LLM_PROVIDER` acepta `gemini` o `template`. El adaptador de Gemini se probó contra la API real el 26 de septiembre con `gemini-3.8-flash`: las tres explicaciones que llaman al modelo pasaron la guarda de números. Si Google responde que el modelo está saturado, el cliente reintenta hasta tres veces y, si sigue fallando, se usa la plantilla.
 
 ## Arranque
 
@@ -51,7 +55,7 @@ El análisis del dataset entregado produce cuatro anomalías. Un test de regresi
 
 | Medidor | Qué pasa | Tipo | Severidad | Prioridad |
 |---|---|---|---|---|
-| M-109 | Consumo +110% desde el 12 de septiembre a las 14:00, corriente al doble y factor de potencia de 0,94 a 0,73. No hay evento que lo explique | Anomalía real | Alta | 100 |
+| M-109 | Consumo +110% desde el 12 de septiembre a las 14:00, corriente al doble y factor de potencia de 0,94 a 0,74. No hay evento que lo explique | Anomalía real | Alta | 100 |
 | M-112 | Consumo estable, pero 16 lecturas con voltaje y factor de potencia físicamente incoherentes | Calidad de datos | Alta | 65 |
 | M-104 | Consumo +47% desde el 11 de septiembre, con el factor de potencia estable. Coincide con una nueva línea productiva | Anomalía explicable | Media | 53 |
 | M-106 | Caída de 12 horas el 8 de septiembre, igual a una parada programada | Falso positivo | Baja | 5 |
@@ -109,7 +113,7 @@ Los tests de la capa de Postgres se saltan sin `DATABASE_URL`. El Makefile carga
 
 ## Despliegue
 
-`deploy/aws/` tiene lo necesario para correr todo en una instancia EC2 con HTTPS: el compose, el Caddyfile, el script de arranque y cómo crearlo y borrarlo. Las decisiones y los límites están en el [ADR 0011](docs/adr/0011-despliegue-en-una-instancia-ec2.md).
+`deploy/aws/` tiene lo necesario para correr la API en una instancia EC2 con HTTPS: el compose, el Caddyfile, el script de arranque, `reset-demo.sh` para dejar la demo sin análisis y cómo crearlo y borrarlo. El frontend se aloja en Amplify con una regla que reescribe `/api` hacia la instancia. Las decisiones y los límites están en el [ADR 0011](docs/adr/0011-despliegue-en-una-instancia-ec2.md).
 
 ## Estructura
 
@@ -122,7 +126,8 @@ internal/ports/      interfaces que el núcleo necesita del exterior
 internal/adapters/   http (chi), postgres (sqlc, goose), llm (Gemini, plantillas, guarda) y seed
 api/                 openapi.yaml y Swagger UI
 data/                readings.csv, events.csv y meters.yaml
-docs/                arquitectura y decisiones (adr/)
+deploy/aws/          compose, Caddyfile, arranque y reinicio de la demo en AWS
+docs/                arquitectura, decisiones (adr/) y guion de la demo
 ```
 
 ## Datos
@@ -132,4 +137,5 @@ docs/                arquitectura y decisiones (adr/)
 ## Documentación
 
 - [`docs/architecture.md`](docs/architecture.md): el diseño completo, el motor y sus umbrales, el modelo de datos y las limitaciones conocidas.
-- [`docs/adr/`](docs/adr): nueve decisiones, cada una con su contexto, las alternativas descartadas y sus consecuencias.
+- [`docs/adr/`](docs/adr): once decisiones, cada una con su contexto, las alternativas descartadas y sus consecuencias.
+- [`docs/demo-guion.md`](docs/demo-guion.md) y [`docs/demo-discurso.md`](docs/demo-discurso.md): el guion de la demo por escenas y el texto hablado.
