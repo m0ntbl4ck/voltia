@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func serve(t *testing.T, status int, body string) (*httptest.Server, *http.Request, *[]byte) {
@@ -86,7 +88,7 @@ func TestGenerateReportsWhatWentWrong(t *testing.T) {
 	}
 	for _, tc := range cases {
 		srv, _, _ := serve(t, tc.status, tc.body)
-		_, err := New("k", "m", WithBaseURL(srv.URL)).Generate(context.Background(), "s", "u")
+		_, err := New("k", "m", WithBaseURL(srv.URL), WithRetryDelay(time.Millisecond)).Generate(context.Background(), "s", "u")
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want it to contain %q", tc.name, err, tc.want)
 		}
@@ -106,5 +108,77 @@ func TestClientNamesItself(t *testing.T) {
 	c := New("k", "gemini-3.8-flash")
 	if c.Provider() != "gemini" || c.Model() != "gemini-3.8-flash" {
 		t.Errorf("%q %q", c.Provider(), c.Model())
+	}
+}
+
+// flaky answers with the given statuses in order, then repeats the last one.
+func flaky(t *testing.T, statuses ...int) (*httptest.Server, *atomic.Int32) {
+	t.Helper()
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := int(calls.Add(1)) - 1
+		status := statuses[min(n, len(statuses)-1)]
+		w.WriteHeader(status)
+		if status == 200 {
+			io.WriteString(w, okBody)
+			return
+		}
+		io.WriteString(w, `{"error":{"code":503,"message":"high demand","status":"UNAVAILABLE"}}`)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &calls
+}
+
+func TestGenerateRetriesWhenTheModelIsBusy(t *testing.T) {
+	srv, calls := flaky(t, 503, 429, 200)
+	c := New("k", "m", WithBaseURL(srv.URL), WithRetryDelay(time.Millisecond))
+
+	text, err := c.Generate(context.Background(), "s", "u")
+	if err != nil || text != `{"summary":"hola"}` {
+		t.Fatalf("text %q, err %v", text, err)
+	}
+	if calls.Load() != 3 {
+		t.Errorf("calls = %d, want 3", calls.Load())
+	}
+}
+
+func TestGenerateGivesUpAfterThreeBusyAnswers(t *testing.T) {
+	srv, calls := flaky(t, 503)
+	c := New("k", "m", WithBaseURL(srv.URL), WithRetryDelay(time.Millisecond))
+
+	_, err := c.Generate(context.Background(), "s", "u")
+	if err == nil || !strings.Contains(err.Error(), "503 UNAVAILABLE") {
+		t.Fatalf("err = %v", err)
+	}
+	if calls.Load() != 3 {
+		t.Errorf("calls = %d, want 3", calls.Load())
+	}
+}
+
+func TestGenerateDoesNotRetryWhatWillNotChange(t *testing.T) {
+	for _, status := range []int{400, 401, 403, 404} {
+		srv, calls := flaky(t, status)
+		c := New("k", "m", WithBaseURL(srv.URL), WithRetryDelay(time.Millisecond))
+		if _, err := c.Generate(context.Background(), "s", "u"); err == nil {
+			t.Errorf("%d: no error", status)
+		}
+		if calls.Load() != 1 {
+			t.Errorf("%d: calls = %d, want 1", status, calls.Load())
+		}
+	}
+}
+
+func TestGenerateStopsWaitingWhenTheContextEnds(t *testing.T) {
+	srv, calls := flaky(t, 503)
+	c := New("k", "m", WithBaseURL(srv.URL), WithRetryDelay(time.Hour))
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	if _, err := c.Generate(ctx, "s", "u"); err == nil {
+		t.Fatal("expected an error")
+	}
+	if time.Since(start) > 2*time.Second || calls.Load() != 1 {
+		t.Errorf("waited %v with %d calls", time.Since(start), calls.Load())
 	}
 }
