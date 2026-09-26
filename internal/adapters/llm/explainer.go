@@ -15,8 +15,9 @@ import (
 	"github.com/m0ntbl4ck/voltia/internal/ports"
 )
 
-// DefaultTimeout is how long one model call may take before the template is used.
-const DefaultTimeout = 20 * time.Second
+// DefaultTimeout is how long one explanation may take, retries included, before
+// the template is used. Gemini sometimes answers busy and needs a second try.
+const DefaultTimeout = 30 * time.Second
 
 // Generator is the transport to one language model. It sends the two prompts
 // and returns the JSON text of the answer; everything else is the Explainer's.
