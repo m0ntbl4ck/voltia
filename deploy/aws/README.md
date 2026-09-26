@@ -14,7 +14,7 @@ Todo lleva la etiqueta `project=voltia`, en `us-east-1`:
 | Rol de instancia | `AmazonSSMManagedInstanceCore` más lectura de `/voltia/*` en Parameter Store |
 | Parámetros cifrados | `/voltia/JWT_SECRET`, `/voltia/POSTGRES_PASSWORD`, `/voltia/GEMINI_API_KEY` |
 
-Costo aproximado con la instancia encendida: unos 20 USD al mes. Confírmalo con el estimador de costos de AWS antes de crear nada.
+Costo aproximado con la instancia encendida: unos 20 USD al mes. Confírmalo con el estimador de costos de AWS antes de crear nada. Una cuenta vinculada no puede crear presupuestos, así que la alerta se crea desde la cuenta pagadora.
 
 ## Crear
 
@@ -37,3 +37,5 @@ cd /opt/deploy && docker compose up -d --build
 ## Borrar todo
 
 Busca los recursos por la etiqueta y bórralos en este orden: instancia (`terminate-instances`), IP elástica (`release-address`), grupo de seguridad, perfil de instancia y rol, y los tres parámetros de `/voltia/`. Mientras exista la IP elástica sin instancia asociada, AWS la cobra.
+
+El presupuesto `voltia-demo-monthly` (10 USD al mes, con aviso al 80 % del gasto real y al 100 % del previsto) vive en la cuenta pagadora de la organización, filtrado por la cuenta del despliegue. Bórralo allí cuando ya no haga falta.
