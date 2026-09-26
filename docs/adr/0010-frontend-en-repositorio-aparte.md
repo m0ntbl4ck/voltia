@@ -20,7 +20,7 @@ El ADR 0008 embebía la SPA en el binario de Go para que `docker compose up` lev
 
 ## Consecuencias
 
-- El despliegue que se hizo lo describe el [ADR 0011](0011-despliegue-en-una-instancia-ec2.md): Caddy sirve el frontend y reenvía `/api` en el mismo origen.
+- El despliegue que se hizo lo describe el [ADR 0011](0011-despliegue-en-una-instancia-ec2.md): el frontend se aloja en Amplify y una reescritura de `/api` lo une a la API en el mismo origen.
 - Si el frontend se despliega aparte, el hosting debe reescribir `/api` hacia el backend para conservar el mismo origen, o el backend debe aceptar CORS con credenciales y cookie `SameSite=None; Secure`. Ninguna de las dos está hecha.
 - La entrega son dos repositorios. El README del backend enlaza al del frontend.
 - El contrato entre ambos es `api/openapi.yaml`.

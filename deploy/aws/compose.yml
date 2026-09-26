@@ -1,5 +1,6 @@
-# Runs on the AWS instance: Postgres, the API and Caddy, which serves the
-# built frontend and forwards /api to the API. Only Caddy publishes ports.
+# Runs on the AWS instance: Postgres, the API and Caddy, which gives the API
+# HTTPS. The frontend lives in its own repository and is hosted elsewhere.
+# Only Caddy publishes ports.
 services:
   postgres:
     image: postgres:17-alpine
@@ -48,7 +49,6 @@ services:
       SITE_ADDRESS: ${SITE_ADDRESS}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ${WEB_DIST:-/opt/site/web}:/srv/web:ro
       - caddy_data:/data
       - caddy_config:/config
 

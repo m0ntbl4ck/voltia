@@ -1,6 +1,6 @@
 # Despliegue en AWS
 
-Una sola instancia EC2 corre PostgreSQL, la API y Caddy. Caddy consigue su certificado HTTPS, sirve el frontend compilado y reenvía `/api` a la API. Las razones y los límites están en el [ADR 0011](../../docs/adr/0011-despliegue-en-una-instancia-ec2.md).
+Una sola instancia EC2 corre PostgreSQL, la API y Caddy. Caddy consigue el certificado HTTPS y reenvía `/api` a la API. La interfaz vive en su propio repositorio, `voltia-web`, y se aloja aparte (AWS Amplify): allí una regla reescribe `/api` hacia esta instancia. Las razones y los límites están en el [ADR 0011](../../docs/adr/0011-despliegue-en-una-instancia-ec2.md).
 
 ## Qué se crea
 
@@ -23,7 +23,7 @@ Costo aproximado con la instancia encendida: unos 20 USD al mes. Confírmalo con
 3. Sustituye `__REGION__` y `__SITE_ADDRESS__` en `user-data.sh` (por ejemplo `34-196-32-65.sslip.io`).
 4. Lanza la instancia con ese script como `user-data` y asocia la IP elástica.
 
-El script instala Docker, Compose y buildx, clona los dos repositorios, compila el frontend en un contenedor de Node y levanta `compose.yml`. El registro queda en `/var/log/voltia-bootstrap.log`.
+El script instala Docker, Compose y buildx, clona este repositorio y levanta `compose.yml`. El registro queda en `/var/log/voltia-bootstrap.log`.
 
 ## Actualizar
 
@@ -31,7 +31,6 @@ Por Session Manager, en la instancia:
 
 ```sh
 cd /opt/voltia && git pull
-cd /opt/voltia-web && git pull   # y volver a compilar dist/ como hace user-data.sh
 cd /opt/deploy && docker compose up -d --build
 ```
 

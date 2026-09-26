@@ -1,5 +1,7 @@
 # SITE_ADDRESS is a name that points at this instance, such as 1-2-3-4.sslip.io.
 # Caddy gets its certificate on its own, so ports 80 and 443 must be open.
+# Only the API is served here: the frontend is hosted separately and reaches it
+# through a rewrite of /api on its own domain.
 {$SITE_ADDRESS} {
 	encode gzip
 
@@ -12,8 +14,6 @@
 	}
 
 	handle {
-		root * /srv/web
-		try_files {path} /index.html
-		file_server
+		respond "VoltIA API. La interfaz esta en otro repositorio." 404
 	}
 }

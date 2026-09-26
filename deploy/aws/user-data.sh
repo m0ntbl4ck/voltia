@@ -27,13 +27,6 @@ GEMINI_API_KEY="$(param GEMINI_API_KEY)"
 POSTGRES_PASSWORD="$(param POSTGRES_PASSWORD)"
 
 git clone --depth 1 https://github.com/m0ntbl4ck/voltia.git /opt/voltia
-git clone --depth 1 https://github.com/m0ntbl4ck/voltia-web.git /opt/voltia-web
-
-# Build the frontend in a throwaway container so the instance needs no Node.
-docker run --rm -v /opt/voltia-web:/app -w /app \
-  -e VITE_DEMO_EMAIL="$DEMO_EMAIL" -e VITE_DEMO_PASSWORD="$DEMO_PASSWORD" \
-  node:24-alpine sh -c "npm ci && npm run build"
-mkdir -p /opt/site && rm -rf /opt/site/web && cp -r /opt/voltia-web/dist /opt/site/web
 
 mkdir -p /opt/deploy
 cp /opt/voltia/deploy/aws/compose.yml /opt/voltia/deploy/aws/Caddyfile /opt/deploy/ 2>/dev/null || true
