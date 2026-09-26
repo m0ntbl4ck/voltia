@@ -8,7 +8,7 @@ El motor analítico decide y el modelo de lenguaje solo redacta. Detección, cla
 
 El servidor está completo: motor, análisis asíncrono, autenticación, anomalías con su ciclo de acciones, medidores, dashboard y documentación OpenAPI.
 
-La interfaz vive en otro repositorio, `voltia-web` (React con Vite), y consume esta API. Aquí solo se dockeriza el servidor. Tampoco está el adaptador de Claude: `LLM_PROVIDER` acepta `gemini` o `template`. El adaptador de Gemini se probó contra un servidor local, no contra la API real.
+La interfaz vive en otro repositorio, [`voltia-web`](https://github.com/m0ntbl4ck/voltia-web) (React con Vite), y consume esta API. Aquí solo se dockeriza el servidor. Para verla: levanta el servidor con `docker compose up` y, en `voltia-web`, corre `npm install` y `npm run dev`. Tampoco está el adaptador de Claude: `LLM_PROVIDER` acepta `gemini` o `template`. El adaptador de Gemini se probó contra un servidor local, no contra la API real.
 
 ## Arranque
 
@@ -94,7 +94,7 @@ Base `/api/v1`, JSON en snake_case, errores `application/problem+json`. Todo req
 
 ## Desarrollo local
 
-Requisitos: Go 1.27 y Docker. Para la interfaz, ver `voltia-web`.
+Requisitos: Go 1.27 y Docker. Para la interfaz, ver [`voltia-web`](https://github.com/m0ntbl4ck/voltia-web).
 
 ```sh
 cp .env.example .env
