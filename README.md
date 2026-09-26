@@ -1,6 +1,6 @@
-# Voltia
+# VoltIA
 
-Plataforma de gestión energética para la prueba técnica AI Energy Management. Lee las lecturas de 12 medidores eléctricos, detecta lo que se sale de su comportamiento normal, decide si es una avería real, un cambio explicable, un falso positivo o un problema de datos, las ordena por prioridad y explica cada una con la evidencia que la sustenta.
+VoltIA (*volt* de voltio, *IA* de inteligencia artificial) es una plataforma de gestión energética para la prueba técnica AI Energy Management. Lee las lecturas de 12 medidores eléctricos, detecta lo que se sale de su comportamiento normal, decide si es una avería real, un cambio explicable, un falso positivo o un problema de datos, las ordena por prioridad y explica cada una con la evidencia que la sustenta.
 
 El motor analítico decide y el modelo de lenguaje solo redacta. Detección, clasificación, severidad, prioridad y confianza son reglas deterministas que se pueden probar. Gemini recibe la evidencia ya calculada y escribe la explicación. Si no hay clave, falla o inventa un número, el operador lee una plantilla.
 
