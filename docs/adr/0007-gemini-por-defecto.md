@@ -21,4 +21,7 @@ El modelo solo redacta, así que un modelo rápido y con capa gratuita alcanza. 
 ## Consecuencias
 
 - En la capa gratuita de Gemini el contenido puede usarse para mejorar productos de Google. Es aceptable con este dataset de prueba; en producción se usaría la capa de pago con opt-out.
-- Estado: el adaptador de Gemini está probado contra un servidor local, no contra la API real. El adaptador de Claude no está escrito, y `LLM_PROVIDER` solo acepta `gemini` o `template`.
+- Estado: el adaptador de Gemini se probó contra la API real el 2026-09-26 con `gemini-3.8-flash`. La primera prueba rechazó las tres explicaciones porque el modelo copiaba fechas en formato ISO (`2026-09-12T14:00:00-05:00`), cuyos números no están en la evidencia. El prompt pidió fechas en lenguaje natural, y con la versión 4 del prompt las tres explicaciones pasaron la guarda.
+- Google respondió alguna vez `503 UNAVAILABLE` por alta demanda. El cliente reintenta hasta tres veces con espera creciente, solo ante 429 y errores 5xx, dentro de un tiempo total de 30 s por explicación.
+- Las explicaciones aceptadas se guardan en la caché: repetir un análisis con la misma evidencia no vuelve a llamar al modelo.
+- El adaptador de Claude no está escrito, y `LLM_PROVIDER` solo acepta `gemini` o `template`.
