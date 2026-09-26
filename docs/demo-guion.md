@@ -5,8 +5,8 @@ Entre 7 y 9 minutos, grabados. Cada escena dice qué se ve, qué se hace y qué 
 ## Antes de grabar
 
 1. La aplicación tiene que estar sin análisis. Si ya se ejecutó uno, borra el estado:
-   - En la instancia de AWS, por Session Manager: `docker exec deploy-postgres-1 psql -U voltia -d voltia -c "delete from anomaly_actions; delete from anomalies; delete from analysis_runs"`.
-   - En local: el mismo comando con `docker exec voltia-postgres-1`.
+   - En la instancia de AWS: `AWS_PROFILE=<perfil> ./deploy/aws/reset-demo.sh`. Borra análisis, anomalías y acciones, y deja las explicaciones de Gemini en la caché.
+   - En local: `docker exec voltia-postgres-1 psql -U voltia -d voltia -c "delete from anomaly_actions; delete from anomalies; delete from analysis_runs"`.
 2. La caché de Gemini debe tener las tres explicaciones. Se comprueba ejecutando un análisis de ensayo: las tres anomalías (M-109, M-112, M-104) tienen que decir "Redactado por gemini-3.8-flash". Si alguna dice "Texto de plantilla", Google respondió con cuota agotada o saturación. Espera unos minutos y repite, o graba igual y cuenta que la plantilla es el respaldo previsto. Después del ensayo, vuelve a borrar el estado.
 3. Abre la aplicación en modo oscuro, ventana de 1280 px de ancho, sin otras pestañas.
 4. Ten a mano el correo y la contraseña de la cuenta de demostración por si el formulario no sale relleno: `demo@voltia.local` y `voltia-demo-2026`.

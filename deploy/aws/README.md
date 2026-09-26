@@ -34,6 +34,10 @@ cd /opt/voltia && git pull
 cd /opt/deploy && docker compose up -d --build
 ```
 
+## Reiniciar la demo
+
+`AWS_PROFILE=<perfil> ./reset-demo.sh` deja la aplicación sin análisis: borra los análisis, las anomalías y las acciones aplicadas. Conserva los medidores, la cuenta demo y las explicaciones de Gemini en la caché, así que el siguiente análisis es inmediato. Necesita la CLI de AWS y permiso para Session Manager. Hazlo antes de cada grabación, porque cada análisis y cada acción cambian el estado que ve cualquiera que entre.
+
 ## Borrar todo
 
 Busca los recursos por la etiqueta y bórralos en este orden: instancia (`terminate-instances`), IP elástica (`release-address`), grupo de seguridad, perfil de instancia y rol, y los tres parámetros de `/voltia/`. Mientras exista la IP elástica sin instancia asociada, AWS la cobra.
