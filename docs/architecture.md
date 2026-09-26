@@ -418,7 +418,7 @@ Base `/api/v1` · JSON snake_case · fechas ISO-8601 UTC · errores **RFC 7807**
 
 | Pantalla | Contenido clave |
 |---|---|
-| Login | Pre-rellenado + "Entrar como demo" |
+| Login | Formulario vacío + botón "Entrar como demo" |
 | Dashboard | 6 KPIs del reto, tarjeta "Requiere atención" (top 3), consumo del período, heatmap medidor × día |
 | Medidores | Tabla con chips de filtro, búsqueda, orden y sparkline de 14 días |
 | Detalle | Consumo/baseline/variación/estado; gráfica ECharts con **banda de baseline**, marcadores de eventos y zona anómala; pestañas V/I/FP |

@@ -9,14 +9,14 @@ Unos 9 minutos y medio, grabados, dentro del límite de 10. Cada escena dice qu�
    - En local: `docker exec voltia-postgres-1 psql -U voltia -d voltia -c "delete from anomaly_actions; delete from anomalies; delete from analysis_runs"`.
 2. La caché de Gemini debe tener las tres explicaciones. Se comprueba ejecutando un análisis de ensayo: las tres anomalías (M-109, M-112, M-104) tienen que decir "Redactado por gemini-3.8-flash". Si alguna dice "Texto de plantilla", Google respondió con cuota agotada o saturación. Espera unos minutos y repite, o graba igual y cuenta que la plantilla es el respaldo previsto. Después del ensayo, vuelve a borrar el estado.
 3. Abre la aplicación en modo oscuro, ventana de 1280 px de ancho, sin otras pestañas salvo la de la arquitectura del paso 5.
-4. Ten a mano el correo y la contraseña de la cuenta de demostración por si el formulario no sale relleno: `demo@voltia.local` y `voltia-demo-2026`.
+4. El formulario de entrada sale vacío. Se entra con el botón "Entrar como demo". Si prefieres escribirlo a mano, la cuenta es `demo@voltia.local` con la contraseña `voltia-demo-2026`.
 5. Deja abierta en otra pestaña la arquitectura: `https://github.com/m0ntbl4ck/voltia/blob/main/docs/architecture.md#3-vista-de-contexto-y-contenedores`. GitHub dibuja el diagrama solo.
 
 ## Escenas
 
 | # | Tiempo | Pantalla | Qué se hace | Qué se cuenta |
 |---|---|---|---|---|
-| 1 | 0:00 a 0:40 | Login | Se muestra el formulario y se pulsa "Entrar como demo" | VoltIA: volt de voltio, IA de inteligencia artificial. Lee lecturas de 12 medidores eléctricos y dice cuáles investigar primero. Una idea guía el diseño: el motor decide con reglas que se pueden probar, y el modelo de lenguaje solo redacta lo que el motor ya calculó. |
+| 1 | 0:00 a 0:40 | Login | Se muestra el formulario vacío y se pulsa "Entrar como demo" | VoltIA: volt de voltio, IA de inteligencia artificial. Lee lecturas de 12 medidores eléctricos y dice cuáles investigar primero. Una idea guía el diseño: el motor decide con reglas que se pueden probar, y el modelo de lenguaje solo redacta lo que el motor ya calculó. |
 | 2 | 0:40 a 1:00 | Dashboard vacío | No se toca nada | Todavía no hay análisis, y la pantalla lo dice y ofrece la acción. Este es el "antes". |
 | 3 | 1:00 a 1:40 | Panel del análisis | Se pulsa "Ejecutar análisis" y se deja correr. En pantalla dura unos 4 segundos, así que las etapas se explican antes de pulsar o al terminar, mirando el panel | Siete etapas: lecturas, baseline, detección, correlación, eventos, explicación y recomendación. El baseline es lo que cada medidor hace normalmente a cada hora. Al terminar: 4 anomalías, 2 de severidad alta. Se cierra el panel con Escape. |
 | 4 | 1:40 a 2:40 | Dashboard lleno | Se recorren los indicadores, la lista de atención y el mapa de calor | Hay 2 altas prioridades pendientes. En el mapa se ve M-109 en rojo desde el 12 de septiembre y M-104 desde el 11. M-106 tiene una sola casilla que baja el 8. M-112 no aparece porque su problema no cambia el consumo: se ve en las lecturas eléctricas. |
