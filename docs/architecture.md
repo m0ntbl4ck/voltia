@@ -1,4 +1,4 @@
-# Voltia: documento de arquitectura
+# VoltIA: documento de arquitectura
 
 > **AI Energy Management Platform**, MVP para la prueba técnica *Backend + Frontend + Data + IA*.
 > Estado: **aprobado** · Fecha: 2026-09-23 · Entrega: 2026-09-27
@@ -7,7 +7,7 @@
 
 ## 1. Resumen
 
-Voltia convierte lecturas de medidores eléctricos en **decisiones operativas**: detecta qué se sale del comportamiento esperado, distingue anomalías reales de cambios explicables, falsos positivos y problemas de calidad de datos, las **prioriza**, **explica con evidencia** y permite **actuar** sobre ellas.
+VoltIA convierte lecturas de medidores eléctricos en **decisiones operativas**: detecta qué se sale del comportamiento esperado, distingue anomalías reales de cambios explicables, falsos positivos y problemas de calidad de datos, las **prioriza**, **explica con evidencia** y permite **actuar** sobre ellas.
 
 Principio rector del diseño:
 
@@ -55,7 +55,7 @@ flowchart LR
     user([Operador / Evaluador]) -->|navegador| spa
     spa[SPA React<br/>repo voltia-web] -->|fetch + cookie httpOnly| api
 
-    subgraph voltia[Voltia · un binario Go, repo voltia]
+    subgraph voltia[VoltIA · un binario Go, repo voltia]
         api[API REST /api/v1<br/>chi]
         engine[Motor de análisis<br/>Go puro]
         explainer[Explainer<br/>puerto LLM]
@@ -511,7 +511,7 @@ Todo commit se crea con la skill `git-commit-master`. Nadie escribe mensajes de 
 
 ### 11.4 Ramas: trabajo directo en `main`
 
-Voltia es un MVP para una prueba técnica, con un solo autor y cuatro días de plazo, así que no usa ramas de trabajo ni Pull Requests. La skill `git-ramas` no se aplica.
+VoltIA es un MVP para una prueba técnica, con un solo autor y cuatro días de plazo, así que no usa ramas de trabajo ni Pull Requests. La skill `git-ramas` no se aplica.
 
 - **Dónde se trabaja:** los commits van directo a `main`, uno por cambio atómico y con `git-commit-master` (§11.3).
 - **Push:** se confirma con el dueño antes de cada `git push`.
@@ -526,7 +526,7 @@ Repositorio: `github.com/m0ntbl4ck/voltia`.
 |---|---|---|
 | **Jue 24** | El cerebro funciona | Scaffold, migraciones, seed, motor completo; **test de regresión en verde** |
 | **Vie 25** | La API y la IA hablan | API completa + OpenAPI; Explainer (plantillas → Gemini) + guarda + caché; Isolation Forest |
-| **Sáb 26** | Voltia se ve como producto | Las 7 pantallas y el flujo de la demo completo con `docker compose up` |
+| **Sáb 26** | VoltIA se ve como producto | Las 7 pantallas y el flujo de la demo completo con `docker compose up` |
 | **Dom 27** | Entrega | Pulido, tests restantes, adaptador Claude, README + ADRs, prueba en limpio sin key, **grabación de la demo** |
 
 Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria cierra con el Delivery Gate de antislop.

@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Voltia API
+  title: VoltIA API
   version: 0.1.0
   description: |
-    API de Voltia: lecturas de medidores eléctricos convertidas en decisiones operativas.
+    API de VoltIA: lecturas de medidores eléctricos convertidas en decisiones operativas.
 
     El motor analítico decide el tipo, la severidad, la prioridad y la confianza de cada anomalía.
     El texto que las explica sale de plantillas o de un modelo de lenguaje, y solo puede usar cifras de la evidencia.

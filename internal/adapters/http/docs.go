@@ -15,7 +15,7 @@ const docsPage = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Voltia API</title>
+  <title>VoltIA API</title>
   <link rel="stylesheet" href="/api/docs/assets/swagger-ui.css">
 </head>
 <body>

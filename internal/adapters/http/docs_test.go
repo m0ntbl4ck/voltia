@@ -31,7 +31,7 @@ func TestDocsNeedNoSession(t *testing.T) {
 			Title string `yaml:"title"`
 		} `yaml:"info"`
 	}
-	if err := yaml.Unmarshal(spec.Body.Bytes(), &doc); err != nil || doc.OpenAPI != "3.0.3" || doc.Info.Title != "Voltia API" {
+	if err := yaml.Unmarshal(spec.Body.Bytes(), &doc); err != nil || doc.OpenAPI != "3.0.3" || doc.Info.Title != "VoltIA API" {
 		t.Errorf("the served document is not the spec: %+v (%v)", doc, err)
 	}
 }
