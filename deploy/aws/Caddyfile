@@ -1,0 +1,19 @@
+# SITE_ADDRESS is a name that points at this instance, such as 1-2-3-4.sslip.io.
+# Caddy gets its certificate on its own, so ports 80 and 443 must be open.
+{$SITE_ADDRESS} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy voltia:8080
+	}
+
+	handle /healthz {
+		reverse_proxy voltia:8080
+	}
+
+	handle {
+		root * /srv/web
+		try_files {path} /index.html
+		file_server
+	}
+}

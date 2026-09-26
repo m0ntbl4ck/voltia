@@ -107,6 +107,10 @@ make sqlc      # regenera el código de las consultas
 
 Los tests de la capa de Postgres se saltan sin `DATABASE_URL`. El Makefile carga `.env`, así que con la base arriba (`make db`), `make test` los corre.
 
+## Despliegue
+
+`deploy/aws/` tiene lo necesario para correr todo en una instancia EC2 con HTTPS: el compose, el Caddyfile, el script de arranque y cómo crearlo y borrarlo. Las decisiones y los límites están en el [ADR 0011](docs/adr/0011-despliegue-en-una-instancia-ec2.md).
+
 ## Estructura
 
 ```

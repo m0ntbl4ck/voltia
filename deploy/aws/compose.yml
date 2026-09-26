@@ -1,0 +1,58 @@
+# Runs on the AWS instance: Postgres, the API and Caddy, which serves the
+# built frontend and forwards /api to the API. Only Caddy publishes ports.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: voltia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: voltia
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voltia -d voltia"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  voltia:
+    build: ${VOLTIA_SRC:-/opt/voltia}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://voltia:${POSTGRES_PASSWORD}@postgres:5432/voltia?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      PLANT_TZ: America/Bogota
+      SESSION_TTL: 12h
+      DEMO_EMAIL: ${DEMO_EMAIL}
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      DEMO_NAME: Demo
+      LLM_PROVIDER: gemini
+      LLM_MODEL: gemini-3.8-flash
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - voltia
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${WEB_DIST:-/opt/site/web}:/srv/web:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
