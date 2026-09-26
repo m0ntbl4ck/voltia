@@ -21,7 +21,7 @@ cp .env.example .env
 Edita `.env` y completa:
 
 - `JWT_SECRET`: al menos 32 caracteres. Genera uno con `openssl rand -hex 32`.
-- `DEMO_EMAIL` y `DEMO_PASSWORD`: la cuenta con la que vas a entrar. Se crea o se actualiza en cada arranque.
+- `DEMO_EMAIL` y `DEMO_PASSWORD`: la cuenta con la que vas a entrar. Se crea o se actualiza en cada arranque. `.env.example` trae una cuenta pública de demostración, `demo@voltia.local` con la contraseña `voltia-demo-2026`; no la uses en ningún otro sitio.
 - `GEMINI_API_KEY`: opcional. Sin ella las explicaciones salen de plantillas.
 
 Luego:
