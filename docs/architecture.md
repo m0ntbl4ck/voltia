@@ -545,12 +545,9 @@ Todos los días aplican las skills obligatorias de §11.1. Cada entrega diaria c
 
 ## 13. Demo (grabada, 5 a 10 min)
 
-La demo corre sobre lo desplegado: la aplicación en Amplify, la API en AWS y la cuenta pública `demo@voltia.local`. Se preparan dos documentos:
+La demo corre sobre lo desplegado: la aplicación en Amplify, la API en AWS y la cuenta pública `demo@voltia.local`. Se ensayó completo contra la aplicación desplegada y cada cifra coincide con la pantalla.
 
-- [`docs/demo-guion.md`](demo-guion.md): las 10 escenas con su tiempo, lo que se hace en pantalla y lo que se cuenta. Se ensayó completo contra la aplicación desplegada y cada cifra coincide con la pantalla.
-- [`docs/demo-discurso.md`](demo-discurso.md): el texto hablado, de principio a fin: qué es la aplicación, la arquitectura y el recorrido de la demo.
-
-El recorrido: login y dashboard sin análisis, ejecutar el análisis (4 anomalías, 2 de severidad alta), dashboard y mapa de calor, detalle de M-109, investigación de M-109 con su texto de Gemini y sus desgloses, crear la orden de inspección (las altas pendientes bajan de 2 a 1), M-112 como calidad de datos, M-106 como falso positivo y cierre con la arquitectura.
+El recorrido: login y dashboard sin análisis, ejecutar el análisis (4 anomalías, 2 de severidad alta), dashboard y mapa de calor, detalle de M-109, investigación de M-109 con su texto de Gemini y sus desgloses, crear la orden de inspección (las altas pendientes bajan de 2 a 1), M-112 como calidad de datos, M-104 como anomalía explicable, M-106 como falso positivo y cierre con la arquitectura.
 
 Antes de cada grabación se deja el estado limpio con `deploy/aws/reset-demo.sh`.
 

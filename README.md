@@ -138,4 +138,3 @@ docs/                arquitectura, decisiones (adr/) y guion de la demo
 
 - [`docs/architecture.md`](docs/architecture.md): el diseño completo, el motor y sus umbrales, el modelo de datos y las limitaciones conocidas.
 - [`docs/adr/`](docs/adr): once decisiones, cada una con su contexto, las alternativas descartadas y sus consecuencias.
-- [`docs/demo-guion.md`](docs/demo-guion.md) y [`docs/demo-discurso.md`](docs/demo-discurso.md): el guion de la demo por escenas y el texto hablado.
