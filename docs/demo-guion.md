@@ -40,7 +40,9 @@ Se muestra el diagrama y se cuenta en este orden, sin abrir código:
 
 ## Ensayo
 
-El 26 de septiembre se recorrió este guion completo contra la aplicación desplegada en Amplify, con un navegador limpio, y se comprobó cada cifra que se dice en las escenas: los 4 resultados del análisis, las 2 altas prioridades que bajan a 1 tras la acción, las prioridades 100, 65, 53 y 5, la confianza de 99 %, el origen del texto en cada anomalía, los días marcados en el mapa de calor y en la tabla por día, y la documentación de la API. Todo coincidió y no hubo errores de página ni respuestas 5xx. El recorrido automático dura unos 20 segundos, sin las pausas de narración.
+El 26 de septiembre se recorrió este guion completo contra la aplicación desplegada en Amplify, con un navegador limpio, y se comprobó cada cifra que se dice en las escenas: los 4 resultados del análisis, las 2 altas prioridades que bajan a 1 tras la acción, las prioridades 100, 65, 53 y 5, la confianza de M-109 en 99 %, el origen del texto en cada anomalía, los días marcados en el mapa de calor y en la tabla por día, y la documentación de la API. Todo coincidió y no hubo errores de página ni respuestas 5xx. El recorrido automático dura unos 20 segundos, sin las pausas de narración.
+
+El 27 de septiembre se ajustó la fórmula de concordancia de detectores para que tres fuentes independientes ya no toquen el techo: pasó de sumar 0,25 por fuente a sumar 0,15. La confianza de M-109 no cambia, sigue en 99 % porque ya tenía suficientes fuentes propias; las otras tres bajan y se separan entre sí: M-106 al 98 %, M-104 al 93 % y M-112 al 92 %. El guion no nombra estas tres cifras en voz alta, así que no hace falta un nuevo ensayo completo por este cambio, pero conviene mirarlas antes de grabar si se abre el detalle de esos medidores.
 
 ## Límites que conviene decir en voz alta
 

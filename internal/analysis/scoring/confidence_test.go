@@ -20,8 +20,8 @@ func TestAgreementCountsIndependentSources(t *testing.T) {
 	three := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil,
 		consumption(20, 1, 60), powerFactorDrop(20), invalid(1))
 	near(t, "one source", partsOf(one).DetectorAgreement, 0.5, 1e-9)
-	near(t, "one kind on two variables", partsOf(twoVariables).DetectorAgreement, 0.75, 1e-9)
-	near(t, "three kinds", partsOf(three).DetectorAgreement, 1, 1e-9)
+	near(t, "one kind on two variables", partsOf(twoVariables).DetectorAgreement, 0.65, 1e-9)
+	near(t, "three kinds", partsOf(three).DetectorAgreement, 0.8, 1e-9)
 }
 
 // The forest backs up the episode as one more independent source.
@@ -29,7 +29,7 @@ func TestAgreementCountsTheIsolationForest(t *testing.T) {
 	alone := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil, consumption(20, 1, 60))
 	backed := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 20, true, nil, consumption(20, 1, 60), isolation(15, 0.9))
 	near(t, "alone", partsOf(alone).DetectorAgreement, 0.5, 1e-9)
-	near(t, "backed up", partsOf(backed).DetectorAgreement, 0.75, 1e-9)
+	near(t, "backed up", partsOf(backed).DetectorAgreement, 0.65, 1e-9)
 }
 
 // Its score is not a z-score and its hours lie inside the other signals', so
@@ -132,7 +132,8 @@ func TestConfidenceStaysWithinTheFloorAndTheCeiling(t *testing.T) {
 	near(t, "floor", Evaluate(weak, DefaultConfig()).Confidence, 0.5, 1e-9)
 
 	strong := result(domain.RealAnomaly, classify.RuleNoExplainingEvent, 58, true, nil,
-		shift(domain.Consumption, 58, 1, 240, 100, 20), shift(domain.Current, 58, 1, 400, 200, 22), powerFactorDrop(58))
+		shift(domain.Consumption, 58, 1, 240, 100, 20), shift(domain.Current, 58, 1, 400, 200, 22), powerFactorDrop(58),
+		isolation(58, 0.9), detectors.Signal{Kind: detectors.KindOutlier, Variable: domain.Voltage, Hours: 1, MeanZ: 5, Start: t0, End: t0})
 	near(t, "ceiling", Evaluate(strong, DefaultConfig()).Confidence, 0.99, 1e-9)
 }
 

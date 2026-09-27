@@ -87,7 +87,7 @@ func agreement(ep classify.Episode) float64 {
 	if len(shifted) >= 2 {
 		sources++
 	}
-	return math.Min(1, 0.5+0.25*float64(sources-1))
+	return math.Min(1, 0.5+0.15*float64(sources-1))
 }
 
 // strength averages how far the evidence sits from normal and how long it lasted.

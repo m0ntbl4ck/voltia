@@ -212,7 +212,7 @@ func TestRunAnalysisEndToEnd(t *testing.T) {
 		}
 	}
 	if run.Summary == nil || run.Summary.Anomalies != 4 || run.Summary.ByType["REAL_ANOMALY"] != 1 ||
-		run.Summary.BySeverity["HIGH"] != 2 || run.Summary.Confidence < 0.98 || len(run.Summary.Failures) != 0 {
+		run.Summary.BySeverity["HIGH"] != 2 || run.Summary.Confidence < 0.95 || len(run.Summary.Failures) != 0 {
 		t.Errorf("summary = %+v", run.Summary)
 	}
 	var params analysis.Config

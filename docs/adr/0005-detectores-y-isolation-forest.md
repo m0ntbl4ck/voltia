@@ -20,4 +20,4 @@ No hay datos etiquetados, así que no se puede entrenar un clasificador supervis
 
 - Se validó contra una implementación independiente en numpy (2000 árboles) sobre los mismos datos. Coinciden en las puntuaciones máximas y en las variables que aíslan, no en cifras exactas porque los generadores aleatorios difieren.
 - Los medidores sanos también puntúan alto en algunas horas (hasta 9 de 168). Por eso corrobora por proporción de horas y no por una sola.
-- Con tres fuentes la coincidencia de detectores ya llega a 1, y tres de los cuatro casos quedan con confianza 0,99. Hay que decidir si la fórmula debe saturar.
+- Con tres fuentes la coincidencia de detectores llegaba a 1 con un incremento de 0,25 por fuente, y tres de los cuatro casos del dataset quedaban con la misma confianza (0,99). El 27 de septiembre se bajó el incremento a 0,15 por fuente: hacen falta cinco fuentes para tocar el techo, y los tres casos se separan según su evidencia (M-106 en 0,98, M-104 en 0,93, M-112 en 0,92). M-109 no cambia porque ya tenía fuentes de sobra sin necesitar a D7.

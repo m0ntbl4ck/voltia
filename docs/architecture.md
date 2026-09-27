@@ -293,9 +293,9 @@ Las fórmulas internas de cada componente son de esta implementación: el diseñ
 | Medidor | Evidencia principal | Tipo | Severidad | Prioridad | Confianza |
 |---|---|---|---|---|---|
 | **M-109** | +110% desde 12-sep 14:00, I ×2, FP 0,94 → 0,74, sin evento explicativo | `REAL_ANOMALY` | HIGH | **100 (#1)** | 0,99 |
-| **M-112** | kWh estable; 16 lecturas desde 13-sep con V 202/240 y FP 0,58/0,72/0,98 físicamente incoherentes | `DATA_QUALITY` | HIGH | 65 | 0,99 |
-| **M-104** | +47% desde 11-sep, FP estable, coincide con nueva línea productiva | `EXPLAINABLE_ANOMALY` | MEDIUM | 53 | 0,99 |
-| **M-106** | caída de 12 h el 8-sep, coincide exactamente con parada programada | `FALSE_POSITIVE` | LOW | 5 | 0,99 |
+| **M-112** | kWh estable; 16 lecturas desde 13-sep con V 202/240 y FP 0,58/0,72/0,98 físicamente incoherentes | `DATA_QUALITY` | HIGH | 65 | 0,92 |
+| **M-104** | +47% desde 11-sep, FP estable, coincide con nueva línea productiva | `EXPLAINABLE_ANOMALY` | MEDIUM | 53 | 0,93 |
+| **M-106** | caída de 12 h el 8-sep, coincide exactamente con parada programada | `FALSE_POSITIVE` | LOW | 5 | 0,98 |
 | Resto (8) | sin desviaciones | no aplica | no aplica | no aplica | no aplica |
 
 Confianza agregada: 0,989. El estado del medidor (5.8) sale de estas anomalías: M-109 crítico, M-112 y M-104 en alerta y M-106 en OK.
@@ -559,7 +559,7 @@ Antes de cada grabación se deja el estado limpio con `deploy/aws/reset-demo.sh`
 ## 14. Limitaciones conocidas y trabajo futuro
 
 - La confianza es un índice de solidez de evidencia, **no una probabilidad calibrada** (sin datos etiquetados).
-- La coincidencia de detectores llega al máximo con tres fuentes: con D7, M-104, M-106 y M-112 quedan idénticos en 0,99 y se pierde la diferencia entre ellos. Falta decidir una escala menos empinada (por ejemplo 0,5 + 0,15 por fuente).
+- La coincidencia de detectores subía 0,25 por fuente y llegaba al máximo con solo tres: con D7, M-104, M-106 y M-112 quedaban idénticos en 0,99. El 27 de septiembre se bajó a 0,15 por fuente (hacen falta cinco para tocar el techo) y los tres casos se separan según su evidencia (0,93, 0,98 y 0,92).
 - D5 y D6 implementan un subconjunto de las reglas pensadas (sección 5.3). Quedan como trabajo futuro la corriente que sube más que el consumo, el voltaje que baja con corriente alta, el voltaje fuera de ±8% de 220 V y los valores de catálogo repetidos.
 - Los eventos que no declaran duración excluyen 24 h del baseline. Es un valor sin respaldo en los datos.
 - Los umbrales de D4 (20%, noche de 22 a 6, forma mínima 1,5) y de D7 (0,6, 30% de las horas) se midieron sobre 12 medidores y 14 días.
